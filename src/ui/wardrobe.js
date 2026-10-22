@@ -59,6 +59,7 @@ export function openWardrobe(app, res, onDone) {
       if (changed && JSON.stringify(ap.custom) !== before) {
         sim.gainXp(res, 10);
         onDone?.();
+        sim.problems.newLook(res); // restyling counts even when not opened from their request
       }
     },
   });
@@ -96,5 +97,6 @@ export function openWardrobe(app, res, onDone) {
     };
     await res.applyLook();
     toast(`Saved variant “${name}” — other residents can use it too.`);
+    sim.problems.newLook(res);
   }
 }

@@ -1,7 +1,7 @@
 // Resident "problems": thought bubbles asking the player for help, like in
 // Tomodachi Life. Solving them earns money and makes residents happier.
 
-import { chance, clamp, rand } from '../core/util.js';
+import { chance, clamp, rand, pick } from '../core/util.js';
 import { foodById, INJURIES } from './data.js';
 import { TERM_CATEGORIES } from './dialogue.js';
 import { JOBS, jobOf, assignJob } from './jobs.js';
@@ -146,6 +146,18 @@ export class Problems {
   }
 
   /** Apply the player's choice. Returns a short message for the UI. */
+  /**
+   * Something new for this resident's closet / look (an added outfit, a
+   * restyle, a saved variant, wearing another outfit): answers "I'm tired of
+   * my look" however the player got there.
+   */
+  newLook(res) {
+    if (res?.d.problem?.type !== 'clothes') return null;
+    const out = this.solve(res, 'wardrobe');
+    if (out?.msg) this.sim.toast(`👕 ${out.msg}`);
+    return out;
+  }
+
   solve(res, optionId, payload = {}) {
     const sim = this.sim;
     const p = res.d.problem;
@@ -176,6 +188,8 @@ export class Problems {
         break;
       case 'clothes:wardrobe':
         msg = `${res.name} loves the new look!`;
+        res.setEmotion?.('happy', 90);
+        res.say?.(pick(['I love it!', 'So fresh!', 'Do I look good? I look good!', 'A whole new me!']));
         break;
       case 'clothes:later':
         solved = false;

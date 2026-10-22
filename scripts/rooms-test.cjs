@@ -117,7 +117,7 @@ const check = (name, ok, extra = '') => results.push(`${ok ? 'PASS' : 'FAIL'} ${
   await page.locator('.modal button', { hasText: 'Cute' }).click();
   await wait(400);
   await page.screenshot({ path: `${OUT}/r4-voice.png` });
-  check('preset applied', await ev(() => window.__friendlife.sim.residents[0].d.voice.pitch === 1.6));
+  check('preset applied', await ev(() => window.__friendlife.sim.residents[0].d.voice.pitch === 1.8));
   await page.keyboard.press('Escape');
   await page.locator('#panel').evaluate((el) => { el.scrollTop = 520; });
   await wait(500);

@@ -21,7 +21,7 @@ export function closetSection(app, res, rerender) {
       h('span', {}, wearing ? '👗' : '▫️'),
       h('span', {}, h('b', {}, label), sub ? h('span', { class: 'hint' }, ` ${sub}`) : null),
       h('span', { class: 'row', style: { gap: '4px' } },
-        wearing ? h('span', { class: 'tag good' }, 'wearing') : h('button', { class: 'small primary', onclick: async () => { toast(`Changing ${res.name}…`); await sim.changeOutfit(res, idx); rerender(); } }, 'Wear'),
+        wearing ? h('span', { class: 'tag good' }, 'wearing') : h('button', { class: 'small primary', onclick: async () => { toast(`Changing ${res.name}…`); await sim.changeOutfit(res, idx); sim.problems.newLook(res); rerender(); } }, 'Wear'),
         idx >= 0 ? h('button', { class: 'small', title: 'Edit', onclick: () => editOutfit(app, res, idx, rerender) }, '✏') : null,
       ));
   };
@@ -59,6 +59,7 @@ function addOutfit(app, res, rerender) {
             } catch (err) { toast(err.message); }
           }
           toast(`Added ${files.length} outfit(s) to ${res.name}'s closet.`);
+          sim.problems.newLook(res);
           rerender();
         } }, `⬆ Import .vrm just for ${res.name}`),
         h('button', { onclick: () => { m.close(); pickFromLibrary(app, res, rerender); } }, '📦 Use a model from the Library'),
@@ -67,6 +68,7 @@ function addOutfit(app, res, rerender) {
           res.d.outfits.push({ name: `Outfit ${res.d.outfits.length + 1}`, look: JSON.parse(JSON.stringify(cur.look || res.d.look)), outfit: cur.outfit ? JSON.parse(JSON.stringify(cur.outfit)) : null, custom: JSON.parse(JSON.stringify(cur.custom || {})), tags: [] });
           m.close();
           toast('Copied the current look — restyle it in the 👕 Wardrobe after wearing it.');
+          sim.problems.newLook(res);
           rerender();
         } }, '⧉ Copy current look (then restyle it)'),
       ));
@@ -94,6 +96,7 @@ function pickFromLibrary(app, res, rerender) {
       if (!charId) return m.close();
       res.d.outfits.push({ name: lib.displayName(charId), look: { kind: 'vrm', assetId: charId, variantId: null }, outfit: outfitId ? { assetId: outfitId, variantId: null, parts: null, hideBase: [] } : null, custom: { textures: {}, tints: {}, hidden: [] }, tags: [] });
       m.close();
+      app.sim.problems.newLook(res);
       rerender();
     } }, 'Add')),
   });

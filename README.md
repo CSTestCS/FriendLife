@@ -71,7 +71,17 @@ Give residents jobs from their panel (or when they ask for one): **Barista ☕, 
 
 ### Voices & words
 
-Residents talk with **text-to-speech** (your computer's voices — on Windows the built-in ones). The **🎙️ Voice editor** (resident panel, or ✏️ Edit) sets each resident's voice, pitch, speed, volume, **intonation** (pitch movement through sentences; questions rise), **emotion** (mood shifts their voice — happy is brighter, sad slower and lower, angry faster), a **verbal tic** they add to lines ("…, nya!") and how often, **stutter**, and whether they always use speech, babble or stay silent. Babble has its own tone, waveform, vowel colour, speed, pitch range, vibrato and breathiness. Presets: Cute, Deep, Robot, Squeaky, Elderly, Whisper, Hyper, Dramatic, or 🎲 random. A name pronunciation is set in ✏️ Edit. Settings → Voices switches between *Speech* (for the selected resident or everyone nearby), cute *Babble*, or *Off*.
+Residents talk with a **built-in speech synthesizer** (eSpeak, rendered in a background worker), or optionally with your computer's own **system voices**. The **🎙️ Voice editor** (resident panel, or ✏️ Edit) sets:
+
+- **Engine & voice:** built-in voice type (7 male, 5 female, croaky, retro, whisper) and accent (American, British, RP, Northern, West Midlands, Scottish), or a system voice.
+- **Pitch** from ×0.25 (giant) to ×4 (chipmunk) on the built-in engine — the synth's own pitch is combined with playback-rate shifting so speed stays about the same. System voices stop at ×2.
+- **Speed** and **volume**.
+- **Intonation:** how much pitch *and* speed move through every sentence — stressed words rise and stretch, small words hurry, phrase ends lengthen, commas get a continuing rise, questions climb and statements fall. Higher settings stress more words, make bigger moves, split speech into shorter phrases and add longer pauses.
+- **Emotion:** how strongly the resident's current mood shapes the line — happy bounces higher and quicker, in love sing-songs, sad sinks, slows and fades, angry punches stressed words, scared trembles and rushes, shy trails off, hurt yelps then strains, smug drawls. With no particular mood it adds lively emphasis.
+- **Verbal tic** ("…, nya!") and how often, **stutter**, and whether they always use speech, babble or stay silent.
+- **Babble:** tone, waveform, vowel colour, speed, pitch range, vibrato and breathiness — it follows the same intonation/emotion shape.
+
+Presets: Cute, Deep, Giant, Robot, Squeaky, Chipmunk, Elderly, Whisper, Hyper, Dramatic, or 🎲 random; the test box can play a line in any mood. A name pronunciation is set in ✏️ Edit. Settings → Voices switches between *Speech* (for the selected resident or everyone nearby), cute *Babble*, or *Off*. The built-in synthesizer is eSpeak/meSpeak (GPL).
 
 Like Tomodachi Life, residents ask you to **teach them words** (📖 bubbles): something tasty, a place to visit, a hobby, a cute animal, a scary thing, a song, a silly sound, a nickname, a compliment, an insult, a dream… They use your words in conversations, jokes, compliments and arguments ("You smell like *space tacos*!"). Add a pronunciation so the voices say it right. Manage all words in **📖 Words**, or use **📖 Teach word** on any resident.
 
@@ -110,6 +120,8 @@ Every resident has a **Closet** (side panel). Add outfits that belong only to th
 - **⧉ Copy current look** — then restyle it in the 👕 Wardrobe (texture swaps, tints, hidden parts are stored per outfit).
 
 Tag outfits with **Everyday / Sunny / Rain / Snow / Night / Dancing** and residents change into them automatically (with a sparkle) when the weather or time fits. Switching back to a recently worn outfit is instant.
+
+When a resident says *"I'm tired of my look"*, anything new counts: adding an outfit to their closet (any of the three ways), wearing a different closet outfit, restyling them in the 👕 Wardrobe, saving a variant, or changing their model in ✏️ Edit.
 
 ### Outfits (.vrm)
 

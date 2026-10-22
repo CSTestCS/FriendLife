@@ -9,7 +9,7 @@ import { DOLL_DEFAULTS } from '../characters/rig.js';
 import { makeUmbrella, makeHeadBandage, makePlaster, makeSling, makeDizzyStars } from '../world/props.js';
 import { INJURIES, FOODS, CATCHPHRASES, line, DOLL_PALETTES } from './data.js';
 import { angleDamp, clamp, pick, rand, uid, chance, damp } from '../core/util.js';
-import { defaultVoice, stylizeLine } from '../engine/voice.js';
+import { defaultVoice, normVoice, stylizeLine } from '../engine/voice.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -80,6 +80,7 @@ export class Resident {
   constructor(sim, data) {
     this.sim = sim;
     this.d = data;
+    data.voice = normVoice(data.voice); // upgrade voices from older saves
     this.group = new THREE.Group();
     this.group.name = `res_${data.name}`;
     this.group.userData.residentId = data.id;

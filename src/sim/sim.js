@@ -218,7 +218,7 @@ export class Sim extends Emitter {
     res.lastVoice = now;
     const tts = mode === 'speech' && (this.settings.voiceScope === 'near' || this.selected === res);
     const vol = this.selected === res ? 1 : 0.55;
-    this.voice?.speak(text, res.d.voice || {}, { mode: tts ? 'speech' : 'babble', volume: vol, mood: res.mood() });
+    this.voice?.speak(text, res.d.voice || {}, { mode: tts ? 'speech' : 'babble', volume: vol, mood: res.mood(), key: res.id });
   }
 
   alert(text, onClick, kind = 'info') { this.emit('alert', { text, onClick, kind }); }

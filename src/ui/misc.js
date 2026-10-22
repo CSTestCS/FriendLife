@@ -100,7 +100,7 @@ export function openSettings(app, focus) {
         right.append(
           h('div', { class: 'row' }, ...[['speech', '🗣️ Speech'], ['babble', '🎶 Babble'], ['off', '🔇 Off']].map(([k, label]) => h('button', { class: `small ${st.voice === k ? 'active' : ''}`, onclick: () => { st.voice = k; render(); } }, label))),
           h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Speech for'), ...[['selected', 'Selected resident'], ['near', 'Everyone nearby']].map(([k, label]) => h('button', { class: `small ${st.voiceScope === k ? 'active' : ''}`, onclick: () => { st.voiceScope = k; render(); } }, label))),
-          h('div', { class: 'hint' }, 'Speech uses your computer\'s text-to-speech voices with each resident\'s pitch/speed (edit in ✏️ Edit). Others babble.'),
+          h('div', { class: 'hint' }, 'Speech uses each resident\'s voice (built-in synthesizer or a system voice — edit in 🎙️ Voice). Residents not chosen here babble.'),
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.autoOutfits !== false, onchange: (e) => { st.autoOutfits = e.target.checked; } }), ' Residents change outfits by weather/time'),
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.ik !== false, onchange: (e) => { st.ik = e.target.checked; } }), ' Foot IK & head tracking'),
         );

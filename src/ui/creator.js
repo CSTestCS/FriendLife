@@ -190,6 +190,7 @@ export function openCreator(app, res = null, preset = {}) {
       if (avatarChanged) {
         toast('Updating look…');
         await sim.rebuildAvatar(res);
+        sim.problems.newLook(res);
       }
       sim.emit('residents');
       sim.emit('resident', res);
