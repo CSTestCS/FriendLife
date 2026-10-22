@@ -1,0 +1,48 @@
+{
+  "name": "friendlife",
+  "productName": "FriendLife",
+  "version": "0.1.0",
+  "description": "An island life sim starring your VRoid (VRM) avatars",
+  "main": "electron/main.js",
+  "private": true,
+  "author": "FriendLife",
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "start": "npm run build && electron .",
+    "dist:win": "npm run build && electron-builder --win portable --x64",
+    "samples": "node scripts/make-samples.cjs"
+  },
+  "build": {
+    "appId": "com.friendlife.game",
+    "productName": "FriendLife",
+    "files": [
+      "electron/**",
+      "dist/**",
+      "!dist/**/*.map",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.png",
+      "signExecutable": false
+    },
+    "portable": {
+      "artifactName": "FriendLife.exe"
+    }
+  },
+  "devDependencies": {
+    "@pixiv/three-vrm": "3.5.5",
+    "@pixiv/three-vrm-animation": "3.5.5",
+    "electron": "38.8.6",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "three": "0.180.0"
+  }
+}

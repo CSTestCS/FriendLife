@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FriendLife</title>
+  <link rel="icon" href="icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="viewport"></div>
+    <div id="bubbles"></div>
+    <div id="hud" class="hidden">
+      <div id="topbar"></div>
+      <div id="residentList"></div>
+      <div id="panel" class="hidden"></div>
+      <div id="alerts"></div>
+      <div id="buildbar" class="hidden"></div>
+      <div id="helpHint">Drag to orbit · Right-drag to pan · Scroll to zoom · Click a resident · Drop .vrm / .vrma / .png files anywhere to import</div>
+    </div>
+    <div id="toasts"></div>
+    <div id="modalRoot"></div>
+    <div id="title">
+      <div class="title-card">
+        <div class="logo">Friend<span>Life</span></div>
+        <div class="tagline">An island life sim starring your VRoid avatars</div>
+        <div id="titleButtons" class="title-buttons"><div class="loading">Loading…</div></div>
+        <div class="title-foot">Import .vrm characters & outfits, .vrma animations and textures from the 📦 Library.</div>
+      </div>
+    </div>
+    <div id="dropOverlay"><div>📦 Drop to import<br><small>.vrm · .vrma · .json · .png · .jpg</small></div></div>
+  </div>
+  <script src="bundle.js"></script>
+</body>
+</html>
