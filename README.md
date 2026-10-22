@@ -24,13 +24,27 @@ npm run build        # web build in dist/ (serve it with any static file server)
 
 ## Playing
 
-| | |
+| Keyboard & mouse (defaults) | |
 |---|---|
-| Left-drag / right-drag / wheel | orbit / pan / zoom |
-| Click a resident (or the list on the left) | open their panel |
-| `Space` | pause · `1`–`4` speed · `Tab` next resident |
-| `B` | build mode (place trees, benches, lamps… right-click removes) |
-| `L` | library (imports) · `Esc` closes windows |
+| Left-drag / right-drag / wheel | rotate / pan / zoom (swap buttons in Controls) |
+| `W` `A` `S` `D` / arrows · `Q` `E` · `Z` `X` | pan · rotate · zoom |
+| Click a resident (or the list on the left) | select and follow them — rotating and zooming keep following; panning stops, `C` follows again |
+| `Space` pause · `1`–`4` / `-` `=` speed · `Tab` / `` ` `` next / previous resident · `T` talk | |
+| `B` build · `L` library · `M` shop · `N` news · `K` words · `U` studio · `O` settings · `Esc` back | |
+
+| Gamepad (Xbox layout, defaults) | |
+|---|---|
+| Left stick | move the cursor (click anything: residents, buttons, sliders, menus) · `L-Stick` click toggles camera panning |
+| Right stick | rotate the camera, or scroll the panel under the cursor |
+| Ⓐ select · Ⓑ back/close · Ⓧ talk · Ⓨ pause | |
+| LB / RB | previous / next resident |
+| LT / RT | zoom out / in · `R-Stick` click follows the selected resident |
+| D-pad | speed up/down · library · build mode |
+| Start / View | settings / news |
+
+Text boxes open an **on-screen keyboard** when you're using a gamepad (D-pad/stick to move, Ⓐ type, Ⓑ backspace, Ⓧ space, Ⓨ shift, LB/RB move the text cursor, Start done).
+
+Every action can be rebound for keyboard/mouse (including middle and side mouse buttons) and gamepad in **Settings → 🎮 Controls & key bindings**, along with mouse button layout, camera speed, cursor speed, stick deadzone, invert-Y and when the on-screen keyboard appears. Controls are saved per computer.
 
 - **Problems** (thought bubbles over heads) are how residents ask you for help: they're hungry, have a crush and want advice on confessing, want to make up after a fight, want *revenge*, got hurt, got soaked, caught a cold, are heartbroken, bored, want new clothes… Solving them earns coins and levels them up.
 - **Interact** from the side panel: talk, feed (find their favourite and hated foods!), give gifts, umbrellas, towels, first aid, medicine, comfort them, send them to the clinic, or **Set Up** an interaction between two residents (chat, compliment, joke, hug, gossip, dance-off, prank, argue, insult, apologize, confess, break up).

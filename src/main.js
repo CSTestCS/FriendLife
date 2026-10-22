@@ -5,6 +5,10 @@ import { Weather } from './engine/weather.js';
 import { AudioEngine } from './engine/audio.js';
 import { VoiceEngine } from './engine/voice.js';
 import { openDictionary } from './ui/dictionary.js';
+import { InputBindings, orbitCamera, panCamera, zoomCamera } from './ui/input.js';
+import { GamepadController } from './ui/gamepad.js';
+import { OnScreenKeyboard, isTextInput } from './ui/osk.js';
+import { openControls } from './ui/controls.js';
 import { Effects } from './engine/fx.js';
 import { TextureStore } from './engine/textures.js';
 import { Island } from './world/island.js';
@@ -40,6 +44,11 @@ class App {
     this.hud = new Hud(this);
     this.panel = new Panel(this);
     this.build = new BuildMode(this);
+    this.input = new InputBindings();
+    this.osk = new OnScreenKeyboard();
+    this.pad = new GamepadController(this);
+    this.lastDevice = 'mouse';
+    this.applyControls();
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     this.lastFrame = performance.now();
@@ -136,79 +145,73 @@ class App {
   openShop() { openShop(this); }
   openNews() { openNews(this); }
   openDictionary() { openDictionary(this); }
+  openControls() { openControls(this); }
   openSettings(focus) { openSettings(this, focus); }
   toggleBuild() { this.build.toggle(); }
 
   // ------------------------------------------------------------------ input
   bindInput() {
     const canvas = this.stage.renderer.domElement;
+    this.keysDown = new Set();
     let down = null;
-    canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, button: e.button }; });
+    canvas.addEventListener('pointerdown', (e) => {
+      down = { x: e.clientX, y: e.clientY, button: e.button };
+      // dragging with the pan button moves the camera away from the followed resident;
+      // rotating and zooming keep following.
+      const panButton = this.input.prefs.mouseOrbit === 'left' ? 2 : 0;
+      if (e.button === panButton) this.panDrag = true;
+    });
     canvas.addEventListener('pointerup', (e) => {
       if (!down) return;
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       const btn = down.button;
       down = null;
       if (moved > 6 || !this.started) return;
-      this.setMouse(e);
-      if (this.build.active) {
-        // right-click (or the Remove tool) deletes a decoration, left-click places one
-        if (btn === 2 || this.build.erase) this.build.remove(this.pickProp());
-        else if (btn === 0) this.build.click(this.pickGround());
-        return;
-      }
-      if (btn !== 0) return;
-      const res = this.pickResident();
-      if (res) this.sim.select(res);
-      else if (this.sim.selected) { this.sim.followTarget = null; }
+      this.canvasClick(e.clientX, e.clientY, btn);
     });
     canvas.addEventListener('pointermove', (e) => {
-      if (!this.started) return;
-      this.setMouse(e);
+      if (this.panDrag && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6 && this.sim) this.sim.followTarget = null;
       this.moveThrottle = (this.moveThrottle || 0) + 1;
       if (this.moveThrottle % 3) return;
-      if (this.build.active) this.build.pointerMove(this.pickGround());
-      else {
-        const r = this.pickResident();
-        this.hud.hovered = r;
-        canvas.style.cursor = r ? 'pointer' : '';
-      }
+      this.pointerAt(e.clientX, e.clientY);
     });
+    window.addEventListener('pointerup', () => { this.panDrag = false; });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    // when the user drags the camera, stop following
-    this.stage.controls.addEventListener('start', () => { this.dragging = true; });
-    this.stage.controls.addEventListener('end', () => { this.dragging = false; });
-    canvas.addEventListener('wheel', () => {}, { passive: true });
-    let panStart = null;
-    canvas.addEventListener('pointerdown', (e) => { if (e.button === 2) panStart = true; });
-    canvas.addEventListener('pointermove', () => { if (panStart && this.sim) this.sim.followTarget = null; });
-    window.addEventListener('pointerup', () => { panStart = null; });
+    // real mouse movement switches back from gamepad mode
+    window.addEventListener('mousemove', (e) => {
+      if (this.lastDevice === 'pad' && (Math.abs(e.movementX) + Math.abs(e.movementY) > 2)) this.pad.setActive(false);
+    });
+
+    // mouse buttons bound to actions (middle / side buttons by default unbound)
+    window.addEventListener('mousedown', (e) => {
+      if (this.captureKey) return;
+      const acts = this.input.actionsForKey(`Mouse${e.button}`);
+      if (!acts.length) return;
+      if (e.button === 0 && e.target !== canvas) return; // left click on UI always clicks the UI
+      for (const id of acts) this.doAction(id);
+    });
 
     // keyboard
     window.addEventListener('keydown', (e) => {
-      if (e.target.matches('input, textarea, select')) return;
-      if (e.key === 'Escape') {
-        if (closeTopModal()) return;
-        if (this.build.active) return this.build.toggle(false);
-        this.sim.select(null);
+      if (this.captureKey) { this.captureKey(e); return; }
+      if (e.target.matches?.('input, textarea, select')) {
+        if (e.key === 'Escape') e.target.blur();
         return;
       }
-      if (!this.started || anyModalOpen()) return;
-      if (e.code === 'Space') { e.preventDefault(); this.setSpeed(this.sim.speed ? 0 : this.lastSpeed || 1); }
-      if (e.key === '1') this.setSpeed(1);
-      if (e.key === '2') this.setSpeed(2);
-      if (e.key === '3') this.setSpeed(4);
-      if (e.key === '4') this.setSpeed(8);
-      if (e.key === 'b' || e.key === 'B') this.toggleBuild();
-      if (e.key === 'l' || e.key === 'L') this.openLibrary();
-      if ((e.key === 'r' || e.key === 'R') && this.build.active) this.build.rot += Math.PI / 4;
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        const rs = this.sim.residents;
-        if (!rs.length) return;
-        const i = rs.indexOf(this.sim.selected);
-        this.sim.select(rs[(i + 1) % rs.length]);
-      }
+      if (this.lastDevice === 'pad') this.pad.setActive(false);
+      const acts = this.input.actionsForKey(e.code);
+      if (!acts.length) return;
+      if (e.code === 'Tab' || e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+      this.keysDown.add(e.code);
+      if (!e.repeat) for (const id of acts) this.doAction(id);
+    });
+    window.addEventListener('keyup', (e) => this.keysDown.delete(e.code));
+    window.addEventListener('blur', () => this.keysDown.clear());
+
+    // on-screen keyboard when a text box gets focus while using the gamepad
+    document.addEventListener('focusin', (e) => {
+      const mode = this.input.prefs.onScreenKeyboard;
+      if (isTextInput(e.target) && (mode === 'always' || (mode === 'auto' && this.lastDevice === 'pad'))) this.osk.show(e.target);
     });
 
     // drag & drop import
@@ -227,6 +230,106 @@ class App {
 
     window.addEventListener('beforeunload', () => { this.save(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.save(); });
+  }
+
+  /** Click on the 3D view at screen coordinates (mouse or gamepad cursor). */
+  canvasClick(clientX, clientY, btn) {
+    if (!this.started) return;
+    this.setMouse({ clientX, clientY });
+    const select = this.input.prefs.selectButton;
+    if (this.build.active) {
+      // the other button (or the Remove tool) deletes a decoration
+      if (btn !== select || this.build.erase) this.build.remove(this.pickProp());
+      else this.build.click(this.pickGround());
+      return;
+    }
+    if (btn !== select) return;
+    const res = this.pickResident();
+    if (res) this.sim.select(res);
+    else if (this.sim.selected) this.sim.followTarget = null;
+  }
+
+  pointerAt(clientX, clientY) {
+    if (!this.started) return;
+    this.setMouse({ clientX, clientY });
+    if (this.build.active) this.build.pointerMove(this.pickGround());
+    else {
+      const r = this.pickResident();
+      this.hud.hovered = r;
+      this.stage.renderer.domElement.style.cursor = r ? 'pointer' : '';
+    }
+  }
+
+  /** One-shot actions (keyboard, mouse buttons, gamepad). */
+  doAction(id) {
+    const sim = this.sim;
+    if (id === 'back') {
+      if (this.osk.open) return this.osk.hide();
+      if (closeTopModal()) return;
+      if (this.build.active) return this.build.toggle(false);
+      sim?.select(null);
+      return;
+    }
+    if (!this.started || anyModalOpen()) return;
+    const step = (dir) => {
+      const speeds = [0, 1, 2, 4, 8];
+      const i = Math.max(0, speeds.indexOf(sim.speed));
+      this.setSpeed(speeds[Math.max(0, Math.min(speeds.length - 1, i + dir))]);
+    };
+    const cycle = (dir) => {
+      const rs = sim.residents;
+      if (!rs.length) return;
+      const i = rs.indexOf(sim.selected);
+      sim.select(rs[(i + dir + rs.length) % rs.length]);
+    };
+    switch (id) {
+      case 'pause': this.setSpeed(sim.speed ? 0 : this.lastSpeed || 1); break;
+      case 'speedUp': step(1); break;
+      case 'speedDown': step(-1); break;
+      case 'speed1': this.setSpeed(1); break;
+      case 'speed2': this.setSpeed(2); break;
+      case 'speed4': this.setSpeed(4); break;
+      case 'speed8': this.setSpeed(8); break;
+      case 'nextResident': cycle(1); break;
+      case 'prevResident': cycle(-1); break;
+      case 'talk': if (sim.selected) { const msg = sim.talkTo(sim.selected); if (msg) toast(msg); } break;
+      case 'focusSelected': if (sim.selected) sim.followTarget = sim.selected; break;
+      case 'settings': this.openSettings(); break;
+      case 'news': this.openNews(); break;
+      case 'library': this.openLibrary(); break;
+      case 'build': this.toggleBuild(); break;
+      case 'shop': this.openShop(); break;
+      case 'words': this.openDictionary(); break;
+      case 'studio': this.openStudio(); break;
+      case 'rotateBuild': if (this.build.active) this.build.rot += Math.PI / 4; break;
+      default: break;
+    }
+  }
+
+  /** Continuous actions while a key/button is held. */
+  holdAction(id, dt) {
+    if (!this.started || anyModalOpen() || this.osk.open) return;
+    const sp = this.input.prefs.cameraSpeed;
+    switch (id) {
+      case 'panForward': panCamera(this.stage, 0, dt * 1.6 * sp); this.sim.followTarget = null; break;
+      case 'panBack': panCamera(this.stage, 0, -dt * 1.6 * sp); this.sim.followTarget = null; break;
+      case 'panLeft': panCamera(this.stage, -dt * 1.6 * sp, 0); this.sim.followTarget = null; break;
+      case 'panRight': panCamera(this.stage, dt * 1.6 * sp, 0); this.sim.followTarget = null; break;
+      case 'orbitLeft': orbitCamera(this.stage, dt * 1.8 * sp, 0); break;
+      case 'orbitRight': orbitCamera(this.stage, -dt * 1.8 * sp, 0); break;
+      case 'zoomIn': zoomCamera(this.stage, 1 - dt * 1.4 * sp); break;
+      case 'zoomOut': zoomCamera(this.stage, 1 + dt * 1.4 * sp); break;
+      default: break;
+    }
+  }
+
+  applyControls() {
+    const p = this.input.prefs;
+    const c = this.stage.controls;
+    c.mouseButtons = p.mouseOrbit === 'left'
+      ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+      : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    c.zoomSpeed = p.invertZoom ? -1 : 1;
   }
 
   setMouse(e) {
@@ -259,8 +362,9 @@ class App {
     const dt = Math.min((now - this.lastFrame) / 1000, 0.1);
     this.lastFrame = now;
     const sim = this.sim;
+    this.pad.update(dt);
+    for (const code of this.keysDown) for (const id of this.input.actionsForKey(code)) this.holdAction(id, dt);
     if (this.started) {
-      if (this.dragging) sim.followTarget = null;
       sim.update(dt);
       this.autosaveTimer -= dt;
       if (this.autosaveTimer <= 0) { this.autosaveTimer = 60; this.save(); }

@@ -124,7 +124,9 @@ export function openSettings(app, focus) {
           sim.library.desktop ? h('button', { onclick: () => sim.library.desktop.openModsFolder('') }, '📂 Mods folder') : null,
           h('button', { class: 'danger', onclick: async () => { if (await confirmBox('Start a brand new island? Your residents will be gone (imported files stay in the Library).', 'Start over')) { await sim.library.deleteGame('main'); location.reload(); } } }, '🌱 New island'),
         ));
-        b.append(h('h3', {}, 'Controls'), h('div', { class: 'hint', html: '<span class="kbd">Left-drag</span> orbit · <span class="kbd">Right-drag</span> pan · <span class="kbd">Wheel</span> zoom · <span class="kbd">Click</span> select resident · <span class="kbd">Space</span> pause · <span class="kbd">1-4</span> speed · <span class="kbd">Tab</span> next resident · <span class="kbd">B</span> build · <span class="kbd">L</span> library · <span class="kbd">Esc</span> close' }));
+        b.append(h('h3', {}, 'Controls'), h('div', { class: 'row' },
+          h('button', { class: 'primary', onclick: () => app.openControls() }, '🎮 Controls & key bindings…'),
+          h('span', { class: 'hint', html: 'Mouse: drag to rotate, other button pans, wheel zooms. Keyboard: <span class="kbd">WASD</span> pan · <span class="kbd">Q/E</span> rotate · <span class="kbd">Z/X</span> zoom · <span class="kbd">Space</span> pause · <span class="kbd">Tab</span> next resident · <span class="kbd">C</span> follow selected. Gamepad: left stick cursor, Ⓐ select, Ⓑ back, right stick camera. All rebindable.' })));
       };
       render();
     },

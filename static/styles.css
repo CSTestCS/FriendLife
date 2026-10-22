@@ -175,3 +175,22 @@ input[type=color] { width: 34px; height: 26px; border: 2px solid var(--line); bo
 #dropOverlay.on { display: grid; }
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: #ead3bb; border-radius: 99px; }
+
+/* gamepad cursor & focus */
+#padCursor { position: fixed; left: 0; top: 0; width: 26px; height: 26px; margin: 0; z-index: 300; pointer-events: none;
+  background: radial-gradient(circle at 30% 30%, #fff 0 22%, transparent 23%), var(--accent); border: 3px solid #fff; border-radius: 0 50% 50% 50%;
+  transform-origin: 0 0; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+#padCursor.pan { border-radius: 50%; background: var(--accent-2); }
+.pad-hover { outline: 3px solid var(--accent) !important; outline-offset: 2px; }
+body.using-pad, body.using-pad * { cursor: none !important; }
+
+/* on-screen keyboard */
+#osk { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 400; background: var(--panel); border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.35); padding: 10px 12px; width: min(760px, 96vw); }
+#osk .osk-head { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+#osk .osk-preview { flex: 1; background: #fff; border: 2px solid var(--line); border-radius: 10px; padding: 6px 10px; font-weight: 700; min-height: 34px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#osk .osk-row { display: flex; gap: 5px; margin-bottom: 5px; justify-content: center; }
+#osk .osk-key { flex: 1; min-width: 0; padding: 9px 0; font-size: 16px; }
+#osk .osk-key.wide { flex: 2; font-size: 13px; }
+#osk .osk-key.sel { background: var(--accent); color: #fff; box-shadow: 0 2px 0 #d9693f; transform: scale(1.06); }
+#osk .osk-hint { font-size: 11px; color: var(--ink-soft); text-align: center; }
