@@ -148,10 +148,11 @@ export function think(res, sim) {
       break;
     }
     case 'dance': {
-      const s = sim.locations.stage;
+      const spot = island.stageSpot();
       res.setPlan([
-        { kind: 'walk', x: s.x + rand(-1.3, 1.3), z: s.z + rand(-0.6, 0.6) },
-        { kind: 'anim', anim: 'dance', dur: rand(10, 18), heading: 0.3 + Math.PI, expr: { happy: 1 }, say: line('dance'), emoji: '🎵' },
+        { kind: 'walk', x: spot.entry[0], z: spot.entry[1] },
+        { kind: 'walk', x: spot.x, z: spot.z },
+        { kind: 'anim', anim: 'dance', dur: rand(10, 18), heading: spot.heading, expr: { happy: 1 }, say: line('dance'), emoji: '🎵' },
       ]);
       n.fun = clamp(n.fun + 18, 0, 100);
       return;

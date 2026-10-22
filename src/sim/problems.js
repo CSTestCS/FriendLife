@@ -3,8 +3,9 @@
 
 import { chance, clamp, rand } from '../core/util.js';
 import { foodById, INJURIES } from './data.js';
+import { TERM_CATEGORIES } from './dialogue.js';
 
-const PRIORITY = { hurt: 5, sick: 5, heartbroken: 4, revenge: 4, makeUp: 3, sad: 3, confess: 3, soaked: 2, hungry: 2, wantFriend: 1, bored: 1, clothes: 1 };
+const PRIORITY = { hurt: 5, sick: 5, heartbroken: 4, revenge: 4, makeUp: 3, sad: 3, confess: 3, soaked: 2, hungry: 2, wantFriend: 1, bored: 1, clothes: 1, teachWord: 1 };
 
 export const PROBLEM_DEFS = {
   hungry: {
@@ -62,6 +63,11 @@ export const PROBLEM_DEFS = {
     text: (r, o) => `I'd like to be friends with ${o?.name}. Think they'd like me?`,
     options: [{ id: 'go', label: 'Go say hi!' }, { id: 'no', label: 'Not now' }],
   },
+  teachWord: {
+    icon: '📖',
+    text: (r, o, p) => `Hey! Can you teach me a word for ${TERM_CATEGORIES[p?.category]?.ask || 'something fun'}?`,
+    options: [{ id: 'teach', label: 'Teach a word…', needs: 'text' }, { id: 'later', label: 'Not now' }],
+  },
   bored: {
     icon: '🥱',
     text: () => `I'm bored... What should I do?`,
@@ -80,7 +86,7 @@ export class Problems {
     const cur = res.d.problem;
     if (cur && (PRIORITY[cur.type] || 0) >= (PRIORITY[type] || 0)) return false;
     if (data.other && !this.sim.byId(data.other)) return false;
-    res.d.problem = { type, other: data.other || null, created: this.sim.clock, expires: this.sim.clock + 60 * 18 };
+    res.d.problem = { type, other: data.other || null, category: data.category || null, created: this.sim.clock, expires: this.sim.clock + 60 * 18 };
     this.sim.emit('problem', res);
     this.sim.alert(`${PROBLEM_DEFS[type].icon} ${res.name} has a problem!`, () => this.sim.select(res), 'problem');
     return true;
@@ -91,7 +97,7 @@ export class Problems {
     if (!p) return null;
     const def = PROBLEM_DEFS[p.type];
     const other = p.other ? this.sim.byId(p.other) : null;
-    return { ...p, icon: def.icon, text: def.text(res, other), options: def.options, other };
+    return { ...p, icon: def.icon, text: def.text(res, other, p), options: def.options, other };
   }
 
   /** Periodic checks for need-based problems. */
@@ -114,6 +120,12 @@ export class Problems {
       else if (r.d.wetness > 0.65 && chance(0.4)) this.offer(r, 'soaked');
       else if (n.fun < 25 && chance(0.3)) this.offer(r, 'bored');
       else if (chance(0.015)) this.offer(r, 'clothes');
+      else if (chance(0.03)) {
+        // ask about categories the dictionary has few words for
+        const cats = Object.keys(TERM_CATEGORIES).filter((c) => c !== 'insult' || sim.settings.conflict !== 'off');
+        cats.sort((x, y) => (sim.dialogue.terms[x]?.length || 0) - (sim.dialogue.terms[y]?.length || 0) + Math.random() * 2 - 1);
+        this.offer(r, 'teachWord', { category: cats[0] });
+      }
       else if (n.social < 40 && chance(0.12)) {
         const cand = sim.residents.filter((o) => o !== r && r.relScore(o.id) >= 0 && r.relScore(o.id) < 30);
         if (cand.length) this.offer(r, 'wantFriend', { other: cand[Math.floor(Math.random() * cand.length)].id });
@@ -254,6 +266,21 @@ export class Problems {
         other.changeRel(res.id, 8);
         msg = `${res.name} goes to say hi to ${other.name}.`;
         break;
+      case 'teachWord:teach': {
+        const term = sim.dialogue.addTerm(p.category, payload.text, payload.say, res.id);
+        if (!term) return { error: 'Type a word first.' };
+        const reply = sim.dialogue.taught(res, term);
+        res.clearPlan();
+        res.setPlan([{ kind: 'anim', anim: 'cheer', dur: 2.5, expr: { happy: 1 }, emoji: '📖' }]);
+        res.say(reply);
+        res.addMemory(`Learned the word “${term.text}”`);
+        msg = `${res.name} learned “${term.text}” (${TERM_CATEGORIES[p.category].label}).`;
+        break;
+      }
+      case 'teachWord:later':
+        msg = 'Maybe next time!';
+        solved = false;
+        break;
       case 'wantFriend:no':
         msg = 'Okay...';
         break;
@@ -263,7 +290,10 @@ export class Problems {
         const anim = optionId === 'dance' ? 'dance' : optionId === 'beach' ? 'sitGround' : 'exercise';
         const loc = optionId === 'dance' ? sim.locations.stage : optionId === 'beach' ? sim.locations.beach : sim.locations.park;
         res.clearPlan();
-        res.setPlan([{ kind: 'walk', x: loc.x + rand(-1, 1), z: loc.z + rand(-1, 1) }, { kind: 'anim', anim, dur: 15, expr: { happy: 1 } }]);
+        if (optionId === 'dance') {
+          const spot = sim.island.stageSpot();
+          res.setPlan([{ kind: 'walk', x: spot.entry[0], z: spot.entry[1] }, { kind: 'walk', x: spot.x, z: spot.z }, { kind: 'anim', anim, dur: 15, heading: spot.heading, expr: { happy: 1 } }]);
+        } else res.setPlan([{ kind: 'walk', x: loc.x + rand(-1, 1), z: loc.z + rand(-1, 1) }, { kind: 'anim', anim, dur: 15, expr: { happy: 1 } }]);
         res.d.needs.fun = 100;
         msg = `${res.name} is having fun!`;
         break;

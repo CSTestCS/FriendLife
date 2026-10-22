@@ -38,6 +38,7 @@ export class Hud {
       ...this.speedBtns, h('div', { class: 'sep' }),
       h('button', { title: 'Shop', onclick: () => this.app.openShop() }, '🛍️ Shop'),
       h('button', { title: 'Island news', onclick: () => this.app.openNews() }, '📰 News'),
+      h('button', { title: 'Island dictionary — words residents use', onclick: () => this.app.openDictionary() }, '📖 Words'),
       h('button', { title: 'Import & manage VRM characters, outfits, textures, animations', onclick: () => this.app.openLibrary() }, '📦 Library'),
       h('button', { title: 'Animation Studio', onclick: () => this.app.openStudio() }, '🎬 Studio'),
       h('button', { title: 'Decorate the island (B)', onclick: () => this.app.toggleBuild() }, '🔨 Build'),

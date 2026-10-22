@@ -7,14 +7,15 @@ export function openWardrobe(app, res, onDone) {
   const sim = app.sim;
   const lib = sim.library;
   if (!res.avatar) return toast('Avatar still loading…');
-  const before = JSON.stringify(res.d.custom);
+  const ap = res.appearance(); // main look or the personal outfit being worn
+  const before = JSON.stringify(ap.custom);
   // Work on the per-resident override layer, starting from the composed look so
   // variant values are visible and editable.
   const work = res.composeLook();
   let changed = false;
 
   const m = openModal({
-    title: `👕 Wardrobe — ${res.name}`,
+    title: `👕 Wardrobe — ${res.name}${res.d.wearing >= 0 ? ` (${res.d.outfits[res.d.wearing]?.name})` : ''}`,
     wide: true,
     body: (b) => {
       const slotsBox = h('div', {});
@@ -46,16 +47,16 @@ export function openWardrobe(app, res, onDone) {
       render();
     },
     foot: (f) => {
-      const isVrm = res.d.look.kind === 'vrm' && res.d.look.assetId;
+      const isVrm = ap.look.kind === 'vrm' && ap.look.assetId;
       f.append(...[
         h('button', { onclick: () => { work.textures = {}; work.tints = {}; work.hidden = []; apply(); m.close(); openWardrobe(app, res, onDone); } }, 'Reset all'),
         isVrm ? h('button', { onclick: () => saveVariant('character') }, '💾 Save as character variant') : null,
-        res.d.outfit ? h('button', { onclick: () => saveVariant('outfit') }, '💾 Save as outfit variant') : null,
+        ap.outfit ? h('button', { onclick: () => saveVariant('outfit') }, '💾 Save as outfit variant') : null,
         h('button', { class: 'primary', onclick: () => { m.close(); } }, 'Done'),
       ].filter(Boolean));
     },
     onClose: () => {
-      if (changed && JSON.stringify(res.d.custom) !== before) {
+      if (changed && JSON.stringify(ap.custom) !== before) {
         sim.gainXp(res, 10);
         onDone?.();
       }
@@ -66,9 +67,9 @@ export function openWardrobe(app, res, onDone) {
     changed = true;
     // everything edited lives in the resident's custom layer; variant selections are cleared
     // so what you see is exactly what is stored.
-    res.d.custom = JSON.parse(JSON.stringify(work));
-    if (res.d.look.kind === 'vrm') res.d.look.variantId = null;
-    if (res.d.outfit) res.d.outfit.variantId = null;
+    ap.custom = JSON.parse(JSON.stringify(work));
+    if (ap.look.kind === 'vrm') ap.look.variantId = null;
+    if (ap.outfit) ap.outfit.variantId = null;
     res.applyLook();
   }
 
@@ -83,12 +84,12 @@ export function openWardrobe(app, res, onDone) {
       tints: pick(work.tints),
       hidden: work.hidden.filter((k) => isOutfit === k.startsWith('outfit:')).map((k) => (isOutfit ? k.slice(7) : k)),
     };
-    const assetId = isOutfit ? res.d.outfit.assetId : res.d.look.assetId;
+    const assetId = isOutfit ? ap.outfit.assetId : ap.look.assetId;
     const v = await lib.saveVariant(assetId, look);
     // switch the resident to use the variant and drop the duplicated overrides
-    if (isOutfit) res.d.outfit.variantId = v.id; else res.d.look.variantId = v.id;
+    if (isOutfit) ap.outfit.variantId = v.id; else ap.look.variantId = v.id;
     const keep = (k) => isOutfit !== k.startsWith('outfit:');
-    res.d.custom = {
+    ap.custom = {
       textures: Object.fromEntries(Object.entries(work.textures).filter(([k]) => keep(k))),
       tints: Object.fromEntries(Object.entries(work.tints).filter(([k]) => keep(k))),
       hidden: work.hidden.filter(keep),

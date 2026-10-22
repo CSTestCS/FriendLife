@@ -9,6 +9,19 @@ import { prepareMToonWet, applyMToonWet, patchWeather } from '../engine/material
 import { clamp, damp, rand } from '../core/util.js';
 
 const R180 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+const _A = new THREE.Vector3();
+const _B = new THREE.Vector3();
+const _C = new THREE.Vector3();
+const _n = new THREE.Vector3();
+const _u = new THREE.Vector3();
+const _w = new THREE.Vector3();
+const _L = new THREE.Vector3();
+const _R = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _ikQ = new THREE.Quaternion();
+const _pq = new THREE.Quaternion();
+const _tq = new THREE.Quaternion();
+const _rootQ = new THREE.Quaternion();
 const _q = new THREE.Quaternion();
 const _v = new THREE.Vector3();
 
@@ -144,6 +157,75 @@ export class Avatar {
       if (this.isVRM0) quat.multiply(R180);
     }
     return true;
+  }
+
+  // ------------------------------------------------------------------
+  // Inverse kinematics
+
+  /** Rotate a bone by a world-space rotation q (pivoting at the bone). */
+  _rotateWorld(bone, q) {
+    bone.parent.getWorldQuaternion(_pq);
+    _tq.copy(_pq).invert().multiply(q).multiply(_pq);
+    bone.quaternion.premultiply(_tq);
+    bone.updateMatrixWorld(true);
+  }
+
+  /** Classic analytic two-bone IK (thigh/shin or upper/lower arm) toward a world target. */
+  twoBoneIK(upper, lower, end, target, bendAxis) {
+    upper.getWorldPosition(_A);
+    lower.getWorldPosition(_B);
+    end.getWorldPosition(_C);
+    const l1 = _A.distanceTo(_B), l2 = _B.distanceTo(_C);
+    if (l1 < 1e-4 || l2 < 1e-4) return;
+    const d = clamp(_A.distanceTo(target), Math.abs(l1 - l2) + 1e-3, l1 + l2 - 1e-3);
+    _u.subVectors(_A, _B).normalize();
+    _w.subVectors(_C, _B).normalize();
+    const cur = Math.acos(clamp(_u.dot(_w), -1, 1));
+    const want = Math.acos(clamp((l1 * l1 + l2 * l2 - d * d) / (2 * l1 * l2), -1, 1));
+    _n.crossVectors(_u, _w);
+    if (_n.lengthSq() < 1e-8) _n.copy(bendAxis); else _n.normalize();
+    _ikQ.setFromAxisAngle(_n, want - cur);
+    this._rotateWorld(lower, _ikQ);
+    end.getWorldPosition(_C);
+    _u.subVectors(_C, _A).normalize();
+    _w.subVectors(target, _A).normalize();
+    _ikQ.setFromUnitVectors(_u, _w);
+    this._rotateWorld(upper, _ikQ);
+  }
+
+  /**
+   * Foot IK: keep feet on the ground when it isn't flat under the character
+   * (stage edges, steps, the pier, slopes). groundAt(x, z) gives terrain height,
+   * rootGround is the height the character root stands at.
+   */
+  solveFootIK(groundAt, rootGround, enabled, dt) {
+    const legs = [['leftUpperLeg', 'leftLowerLeg', 'leftFoot', _L], ['rightUpperLeg', 'rightLowerLeg', 'rightFoot', _R]];
+    if (!enabled || !this.getBone('leftFoot') || !this.getBone('rightFoot')) {
+      this.ikDrop = damp(this.ikDrop || 0, 0, 10, dt);
+      this.root.position.y = this.ikDrop;
+      return;
+    }
+    this.root.position.y = 0;
+    this.root.updateWorldMatrix(true, true);
+    const deltas = [];
+    for (const [, , foot, out] of legs) {
+      this.getBone(foot).getWorldPosition(out);
+      deltas.push(clamp(groundAt(out.x, out.z) - rootGround, -0.7, 0.7));
+    }
+    const drop = Math.min(0, deltas[0], deltas[1]);
+    this.ikDrop = damp(this.ikDrop || 0, drop, 14, dt);
+    this.root.position.y = this.ikDrop;
+    if (Math.abs(deltas[0] - this.ikDrop) < 0.01 && Math.abs(deltas[1] - this.ikDrop) < 0.01) return;
+    this.root.updateWorldMatrix(false, true);
+    this.root.getWorldQuaternion(_rootQ);
+    _right.set(-1, 0, 0).applyQuaternion(_rootQ); // character's right (knees bend forward)
+    legs.forEach(([up, lo, foot, pos], i) => {
+      const lift = deltas[i] - this.ikDrop;
+      if (Math.abs(lift) < 0.01) return;
+      const target = pos.clone();
+      target.y += deltas[i]; // original foot height + ground difference under this foot
+      this.twoBoneIK(this.getBone(up), this.getBone(lo), this.getBone(foot), target, _right);
+    });
   }
 
   setExpression(name, weight) {

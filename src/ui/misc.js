@@ -95,6 +95,14 @@ export function openSettings(app, focus) {
           toast(`Skipped to ${label}`);
         } }, label))));
 
+        right.append(h('h3', {}, 'Voices'));
+        right.append(
+          h('div', { class: 'row' }, ...[['speech', '🗣️ Speech'], ['babble', '🎶 Babble'], ['off', '🔇 Off']].map(([k, label]) => h('button', { class: `small ${st.voice === k ? 'active' : ''}`, onclick: () => { st.voice = k; render(); } }, label))),
+          h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Speech for'), ...[['selected', 'Selected resident'], ['near', 'Everyone nearby']].map(([k, label]) => h('button', { class: `small ${st.voiceScope === k ? 'active' : ''}`, onclick: () => { st.voiceScope = k; render(); } }, label))),
+          h('div', { class: 'hint' }, 'Speech uses your computer\'s text-to-speech voices with each resident\'s pitch/speed (edit in ✏️ Edit). Others babble.'),
+          h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.autoOutfits !== false, onchange: (e) => { st.autoOutfits = e.target.checked; } }), ' Residents change outfits by weather/time'),
+          h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.ik !== false, onchange: (e) => { st.ik = e.target.checked; } }), ' Foot IK & head tracking'),
+        );
         right.append(h('h3', {}, 'Audio & view'));
         right.append(
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.music, onchange: (e) => { st.music = e.target.checked; sim.audio.setMusic(st.music); } }), ' Music'),

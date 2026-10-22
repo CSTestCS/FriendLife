@@ -7,6 +7,7 @@ import { think } from './brain.js';
 import { Social, emotionExpr } from './social.js';
 import { FightManager } from './fight.js';
 import { Problems } from './problems.js';
+import { Dialogue } from './dialogue.js';
 import { INJURIES, line, NAMES, foodById, FOODS, ITEMS } from './data.js';
 import { Emitter, chance, clamp, damp, pick, rand } from '../core/util.js';
 
@@ -19,6 +20,9 @@ export const DEFAULT_SETTINGS = {
   volume: 0.7,
   follow: true,
   shadows: true,
+  voice: 'speech', // speech | babble | off
+  voiceScope: 'selected', // selected | near  (who uses text-to-speech; others babble)
+  autoOutfits: true,
   quality: 'high',
 };
 
@@ -40,6 +44,7 @@ export class Sim extends Emitter {
     this.social = new Social(this);
     this.fights = new FightManager(this);
     this.problems = new Problems(this);
+    this.dialogue = new Dialogue(this);
     this.snowmen = [];
     this.lastDay = this.day;
     this.minuteAcc = 0;
@@ -100,13 +105,50 @@ export class Sim extends Emitter {
     res.setExpression(emotionExpr(res.mood()));
   }
 
+  /** Switch a resident into one of their personal outfits (-1 = main look). */
+  async changeOutfit(res, index, { quiet = false } = {}) {
+    if (index >= (res.d.outfits?.length || 0)) index = -1;
+    if (res.d.wearing === index && res.avatar) return;
+    res.d.wearing = index;
+    await res.buildAvatar();
+    res.refreshAttachments();
+    res.setExpression(emotionExpr(res.mood()));
+    if (!res.inside) {
+      const p = new THREE.Vector3(res.x, res.group.position.y + (res.headHeight || 1.4) * 0.6, res.z);
+      this.effects.burst(p, '#ffe6f7', 10, 0.3);
+      if (!quiet) res.say(index >= 0 ? `Time for my ${res.d.outfits[index].name}!` : 'Back to my usual look!', { emoji: '✨' });
+      if (this.isNear(res)) this.audio.pop();
+    }
+    this.emit('resident', res);
+  }
+
+  /** Which personal outfit fits the moment (tags: rain, snow, sunny, night, party). */
+  preferredOutfit(res) {
+    const list = res.d.outfits || [];
+    if (!list.length) return -1;
+    const hour = this.minuteOfDay / 60;
+    const w = this.weather;
+    const want = [];
+    if (w.snowing) want.push('snow');
+    if (w.raining) want.push('rain');
+    if (hour >= 19 || hour < 6) want.push('night');
+    if (w.type === 'sunny' || w.type === 'partly') want.push('sunny');
+    if (res.player.action === 'dance') want.push('party');
+    for (const tag of want) {
+      const i = list.findIndex((o) => (o.tags || []).includes(tag));
+      if (i >= 0) return i;
+    }
+    const def = list.findIndex((o) => (o.tags || []).includes('default'));
+    return def;
+  }
+
   removeResident(res) {
     this.social.cancelFor(res);
     const f = this.fights.fightOf(res);
     if (f) f.end(-1, 'player');
     res.leaveSeat();
     res.disposeAttachments();
-    res.avatar?.dispose();
+    res.disposeAvatars();
     this.residentGroup.remove(res.group);
     this.residents = this.residents.filter((r) => r !== res);
     this.island.releaseHouse(res.id);
@@ -156,6 +198,18 @@ export class Sim extends Emitter {
     this.newsLog.unshift(item);
     if (this.newsLog.length > 150) this.newsLog.length = 150;
     this.emit('news', item);
+  }
+
+  /** Voice output for something a resident says. */
+  speak(res, text) {
+    const mode = this.settings.voice;
+    if (mode === 'off' || !this.isNear(res) || this.speed > 4) return;
+    const now = this.realTime;
+    if ((res.lastVoice || 0) > now - 0.4 / Math.max(1, this.speed)) return;
+    res.lastVoice = now;
+    const tts = mode === 'speech' && (this.settings.voiceScope === 'near' || this.selected === res);
+    const vol = this.selected === res ? 1 : 0.55;
+    this.voice?.speak(text, res.d.voice || {}, { mode: tts ? 'speech' : 'babble', volume: vol });
   }
 
   alert(text, onClick, kind = 'info') { this.emit('alert', { text, onClick, kind }); }
@@ -220,9 +274,21 @@ export class Sim extends Emitter {
     this.stage.camera.getWorldPosition(new THREE.Vector3());
     const cam = this.stage.camera.position;
     const m = res.mood();
-    const text = res.d.injuries.length ? line('hurt') : res.d.wetness > 0.6 ? line('soaked') : res.d.needs.hunger < 30 ? line('hungry') : m === 'sad' ? line('sad') : m === 'happy' ? line('happy') : pick([...['chat', 'chat', 'happy'].map((k) => line(k)), res.d.catchphrase]);
-    res.setPlan([{ kind: 'anim', anim: m === 'sad' ? 'sulk' : 'wave', dur: 3, faceX: cam.x, faceZ: cam.z, say: text, expr: emotionExpr(m) }]);
+    const dl = this.dialogue;
+    const w = this.weather;
+    const other = this.residents.find((o) => o !== res && res.relScore(o.id) > 20) || this.residents.find((o) => o !== res) || res;
+    const text = res.d.injuries.length ? line('hurt')
+      : res.d.wetness > 0.6 ? line('soaked')
+        : res.d.needs.hunger < 30 ? dl.line('hungry', { a: res })
+          : res.d.needs.energy < 25 ? dl.line('sleepy', { a: res })
+            : m === 'sad' ? dl.line('sad', { a: res })
+              : chance(0.25) && (w.raining || w.snowing || w.type === 'sunny') ? dl.line(w.stormy ? 'weatherStorm' : w.raining ? 'weatherRain' : w.snowing ? 'weatherSnow' : 'weatherSun', { a: res })
+                : chance(0.15) ? res.d.catchphrase
+                  : m === 'happy' && chance(0.4) ? dl.line('happy', { a: res })
+                    : dl.chat(res, other)[0];
+    res.setPlan([{ kind: 'anim', anim: m === 'sad' ? 'sulk' : 'wave', dur: 4, faceX: cam.x, faceZ: cam.z, say: text, expr: emotionExpr(m) }]);
     res.d.needs.social = clamp(res.d.needs.social + 10, 0, 100);
+    res.lookAtCamUntil = this.realTime + 5;
     return null;
   }
 
@@ -481,6 +547,19 @@ export class Sim extends Emitter {
       // keep faces in sync with mood when idle
       if (!r.engaged && !r.ko && r.avatar && chance(0.02 * min)) r.setExpression(emotionExpr(r.mood()));
     }
+    // residents change into weather/time appropriate personal outfits on their own
+    this.outfitTimer = (this.outfitTimer || 0) - min;
+    if (this.outfitTimer <= 0 && this.settings.autoOutfits) {
+      this.outfitTimer = 20;
+      for (const r of this.residents) {
+        if (!r.d.autoOutfits || !r.d.outfits?.length || r.engaged || r.ko || r.changing) continue;
+        const want = this.preferredOutfit(r);
+        if (want !== r.d.wearing) {
+          r.changing = true;
+          this.changeOutfit(r, want).finally(() => { r.changing = false; });
+        }
+      }
+    }
     // melt snowmen
     if (this.snowmen.length && this.weather.snowCover < 0.1) {
       for (const id of this.snowmen) this.island.removeProp(id);
@@ -504,8 +583,8 @@ export class Sim extends Emitter {
         if (d < min && d > 1e-4) {
           const push = (min - d) * 0.5;
           const ux = dx / d, uz = dz / d;
-          if (!a.engaged?.isFight) a.placeAt(a.x - ux * push, a.z - uz * push);
-          if (!b.engaged?.isFight) b.placeAt(b.x + ux * push, b.z + uz * push);
+          if (!a.engaged?.isFight) a.placeAt(a.x - ux * push, a.z - uz * push, false);
+          if (!b.engaged?.isFight) b.placeAt(b.x + ux * push, b.z + uz * push, false);
         }
       }
     }
@@ -524,6 +603,7 @@ export class Sim extends Emitter {
       residents: this.residents.map((r) => r.serialize()),
       props: this.island.serializeProps().filter((p) => !this.snowmen.includes(p.id)),
       anims: this.registry.serialize(),
+      dialogue: this.dialogue.serialize(),
       surfaces: this.surfaces || {},
     };
   }
@@ -537,6 +617,7 @@ export class Sim extends Emitter {
     this.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
     this.weather.restore(data.weather);
     this.registry.restore(data.anims);
+    this.dialogue.restore(data.dialogue);
     for (const p of data.props || []) this.island.placeProp(p.type, p.x, p.z, p.rot, p.id);
     this.surfaces = data.surfaces || {};
     for (const rd of data.residents || []) {

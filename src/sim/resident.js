@@ -8,13 +8,17 @@ import { MOD_POSES } from '../characters/builtinAnims.js';
 import { DOLL_DEFAULTS } from '../characters/rig.js';
 import { makeUmbrella, makeHeadBandage, makePlaster, makeSling, makeDizzyStars } from '../world/props.js';
 import { INJURIES, FOODS, CATCHPHRASES, line, DOLL_PALETTES } from './data.js';
-import { angleDamp, clamp, pick, rand, uid, chance } from '../core/util.js';
+import { angleDamp, clamp, pick, rand, uid, chance, damp } from '../core/util.js';
+import { defaultVoice } from '../engine/voice.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _p = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 export const RESIDENT_SCALE = 1.3;
+const _e = new THREE.Euler();
+// poses where the feet are not standing on the ground: no foot IK / head tracking
+const NO_IK = new Set(['sit', 'sitGround', 'lieDown', 'sleep', 'knockdown', 'getUp', 'tackle', 'eat']);
 
 export function randomTraits() {
   const r = () => Math.round(rand(0.05, 0.95) * 100) / 100;
@@ -57,6 +61,11 @@ export function newResidentData(name, gender = pick(['m', 'f'])) {
     injuries: [],
     wetness: 0,
     hasUmbrella: false,
+    voice: defaultVoice(gender),
+    sayName: '',
+    outfits: [], // personal alternate outfits (extra VRM models / looks unique to this resident)
+    wearing: -1, // -1 = main look, otherwise index into outfits
+    autoOutfits: true,
     umbrellaColor: pick(['#4aa3df', '#e84a5f', '#ffd166', '#06d6a0', '#9b5de5']),
     relationships: {},
     problem: null,
@@ -113,33 +122,61 @@ export class Resident {
   get z() { return this.group.position.z; }
 
   // ------------------------------------------------------------------ avatar
+  /**
+   * The appearance currently worn: the resident's main look (stored on d) or one of
+   * their personal alternate outfits. Both have {look, outfit, custom}.
+   */
+  appearance() {
+    const o = this.d.wearing >= 0 ? this.d.outfits?.[this.d.wearing] : null;
+    if (o) {
+      o.custom ||= { textures: {}, tints: {}, hidden: [] };
+      return o;
+    }
+    return this.d;
+  }
+
   async buildAvatar() {
     const sim = this.sim;
     const lib = sim.library;
-    let avatar = null;
-    const look = this.d.look;
-    if (look.kind === 'vrm' && look.assetId && lib.get(look.assetId)) {
-      try {
-        avatar = await Avatar.fromVRM(await lib.getData(look.assetId));
-      } catch (err) {
-        console.warn('VRM failed, falling back to doll', err);
-        sim.toast?.(`Could not load ${lib.displayName(look.assetId)}: ${err.message}`);
+    const ap = this.appearance();
+    const look = ap.look || this.d.look;
+    const key = JSON.stringify([look, ap.outfit || null, this.d.scale]);
+    this.avatarCache ||= new Map();
+    let avatar = this.avatarCache.get(key) || null;
+    if (avatar) this.avatarCache.delete(key);
+    if (!avatar) {
+      if (look.kind === 'vrm' && look.assetId && lib.get(look.assetId)) {
+        try {
+          avatar = await Avatar.fromVRM(await lib.getData(look.assetId));
+        } catch (err) {
+          console.warn('VRM failed, falling back to doll', err);
+          sim.toast?.(`Could not load ${lib.displayName(look.assetId)}: ${err.message}`);
+        }
+      }
+      if (!avatar) avatar = await Avatar.fromDoll(look.doll || this.d.look.doll || DOLL_DEFAULTS);
+      // overlay outfit (clothing parts from another VRM)
+      if (ap.outfit?.assetId && lib.get(ap.outfit.assetId)) {
+        try {
+          await avatar.wearOutfit(await lib.getData(ap.outfit.assetId), ap.outfit.parts, ap.outfit.assetId);
+        } catch (err) {
+          console.warn('Outfit failed', err);
+        }
       }
     }
-    if (!avatar) avatar = await Avatar.fromDoll(look.doll || DOLL_DEFAULTS);
-    // outfit
-    if (this.d.outfit?.assetId && lib.get(this.d.outfit.assetId)) {
-      try {
-        await avatar.wearOutfit(await lib.getData(this.d.outfit.assetId), this.d.outfit.parts, this.d.outfit.assetId);
-      } catch (err) {
-        console.warn('Outfit failed', err);
+    // swap in; keep the previous body cached so switching outfits back is instant
+    if (this.avatar && this.avatar !== avatar) {
+      this.avatar.root.removeFromParent();
+      this.avatarCache.set(this.avatarKey, this.avatar);
+      while (this.avatarCache.size > 3) {
+        const [oldKey, old] = this.avatarCache.entries().next().value;
+        this.avatarCache.delete(oldKey);
+        old.dispose();
       }
     }
-    // swap in
-    if (this.avatar) this.avatar.dispose();
     this.avatar = avatar;
-    // auto size: keep VRoid models around doll scale so the island reads well
-    // Residents are a bit larger than life so they read well next to the buildings.
+    this.avatarKey = key;
+    // Residents are a bit larger than life so they read well next to the buildings;
+    // VRoid models are normalised to roughly the same height.
     let s = (this.d.scale || 1) * RESIDENT_SCALE;
     if (avatar.kind === 'vrm') s *= clamp(1.45 / avatar.height, 0.4, 1.4);
     avatar.root.scale.setScalar(s);
@@ -153,9 +190,11 @@ export class Resident {
     this.player.pose && avatar.applyPose(this.player.pose);
   }
 
-  /** Merge character variant + outfit variant + per-resident overrides. */
+  /** Merge character variant + outfit variant + per-resident overrides (of the worn appearance). */
   composeLook() {
     const lib = this.sim.library;
+    const ap = this.appearance();
+    const look = ap.look || this.d.look;
     const out = { textures: {}, tints: {}, hidden: [] };
     const addLook = (l, prefix = '') => {
       if (!l) return;
@@ -163,11 +202,17 @@ export class Resident {
       for (const [k, v] of Object.entries(l.tints || {})) out.tints[prefix + k] = v;
       for (const k of l.hidden || []) if (!out.hidden.includes(prefix + k)) out.hidden.push(prefix + k);
     };
-    if (this.d.look.kind === 'vrm' && this.d.look.assetId && this.d.look.variantId) addLook(lib.variant(this.d.look.assetId, this.d.look.variantId));
-    if (this.d.outfit?.assetId && this.d.outfit.variantId) addLook(lib.variant(this.d.outfit.assetId, this.d.outfit.variantId), 'outfit:');
-    if (this.d.outfit?.hideBase) for (const k of this.d.outfit.hideBase) if (!out.hidden.includes(k)) out.hidden.push(k);
-    addLook(this.d.custom);
+    if (look.kind === 'vrm' && look.assetId && look.variantId) addLook(lib.variant(look.assetId, look.variantId));
+    if (ap.outfit?.assetId && ap.outfit.variantId) addLook(lib.variant(ap.outfit.assetId, ap.outfit.variantId), 'outfit:');
+    if (ap.outfit?.hideBase) for (const k of ap.outfit.hideBase) if (!out.hidden.includes(k)) out.hidden.push(k);
+    addLook(ap.custom);
     return out;
+  }
+
+  disposeAvatars() {
+    for (const a of this.avatarCache?.values() || []) a.dispose();
+    this.avatarCache?.clear();
+    this.avatar?.dispose();
   }
 
   async applyLook() {
@@ -275,13 +320,17 @@ export class Resident {
   }
 
   // ------------------------------------------------------------------ actions
+  /** text may be a string or {text, say} (say = pronunciation for the voice). */
   say(text, opts = {}) {
+    let spoken = null;
+    if (text && typeof text === 'object') { spoken = text.say; text = text.text; }
+    text = String(text ?? '');
     this.bubble = { text, emoji: opts.emoji || '', kind: opts.kind || 'speech', until: this.sim.realTime + (opts.dur || Math.min(5, 1.6 + text.length * 0.05)) };
-    if (opts.talk !== false && this.avatar) {
+    if (opts.talk !== false && this.avatar && text) {
       this.avatar.talking = true;
-      this.talkUntil = this.sim.realTime + Math.min(2.5, 0.6 + text.length * 0.05);
+      this.talkUntil = this.sim.realTime + Math.min(3, 0.6 + text.length * 0.05);
     }
-    if (opts.sound !== false && this.sim.isNear(this)) this.sim.audio.talk();
+    if (opts.sound !== false && text) this.sim.speak(this, spoken || text);
   }
 
   emote(emoji, dur = 2) {
@@ -300,8 +349,28 @@ export class Resident {
     this.targetHeading = Math.atan2(x - this.x, z - this.z);
   }
 
-  placeAt(x, z) {
-    this.group.position.set(x, this.sim.island.heightAt(x, z), z);
+  /** Move to x,z on the ground. snap=false lets the height ease (stepping onto platforms). */
+  placeAt(x, z, snap = true) {
+    this.groundY = this.sim.island.heightAt(x, z);
+    this.group.position.x = x;
+    this.group.position.z = z;
+    if (snap || Math.abs(this.group.position.y - this.groundY) > 1.2) this.group.position.y = this.groundY;
+  }
+
+  /** Keep residents out of buildings, trees, benches and other solid props. */
+  pushOutOfObstacles(destX, destZ) {
+    const obs = this.sim.island.obstacles;
+    let x = this.x, z = this.z;
+    for (const o of obs) {
+      const r = o.r + 0.18;
+      const dx = x - o.x, dz = z - o.z;
+      const d = Math.hypot(dx, dz);
+      if (d >= r || d < 1e-4) continue;
+      if (destX !== undefined && Math.hypot(destX - o.x, destZ - o.z) < r) continue; // going into it on purpose (door, seat)
+      x = o.x + (dx / d) * r;
+      z = o.z + (dz / d) * r;
+    }
+    if (x !== this.x || z !== this.z) this.placeAt(x, z, false);
   }
 
   stopMoving() {
@@ -406,8 +475,14 @@ export class Resident {
 
     // animation (skip the expensive part when hidden indoors)
     if (!this.inside) {
+      // ease height when stepping onto/off platforms
+      if (this.groundY === undefined) this.groundY = this.group.position.y;
+      this.group.position.y = damp(this.group.position.y, this.groundY, 16, dt);
       const pose = this.player.update(dt);
+      this._applyLookAt(pose, dt);
       this.avatar.applyPose(pose);
+      const ik = !this.seat && !this.ko && !NO_IK.has(this.player.action) && sim.settings.ik !== false;
+      this.avatar.solveFootIK((x, z) => sim.island.heightAt(x, z), this.group.position.y, ik, dt);
       this.avatar.update(dt);
       this._updateAttachments(dt);
     }
@@ -513,7 +588,8 @@ export class Resident {
     const step = Math.min(dist, speed * dt);
     const nx = this.x + (dx / dist) * step;
     const nz = this.z + (dz / dist) * step;
-    this.group.position.set(nx, this.sim.island.heightAt(nx, nz), nz);
+    this.placeAt(nx, nz, false);
+    this.pushOutOfObstacles(m.x, m.z);
     this.targetHeading = Math.atan2(dx, dz);
     const anim = this.moveAnim();
     this.play(anim, { speed: anim === 'walk' || anim === 'walkHappy' ? speed / 1.3 : 1 });
@@ -523,6 +599,39 @@ export class Resident {
       this.slipCooldown = 3;
       if (chance(0.025 * this.sim.weather.wetness * (this.sim.settings.conflict === 'off' ? 0.3 : 1))) this.sim.slip(this);
     }
+  }
+
+  // ------------------------------------------------------------------ look-at (head IK)
+  lookTarget() {
+    const e = this.engaged;
+    let other = null;
+    if (e?.isFight) other = e.f?.get(this)?.target || null;
+    else if (e && (e.a === this || e.b === this)) other = e.a === this ? e.b : e.a;
+    if (other && !other.inside) return _p.set(other.x, other.group.position.y + (other.headHeight || 1.4) * 0.9, other.z);
+    if (this.lookAtCamUntil > this.sim.realTime) return this.sim.stage.camera.position;
+    return null;
+  }
+
+  _applyLookAt(pose, dt) {
+    const t = NO_IK.has(this.player.action) || this.ko ? null : this.lookTarget();
+    let yaw = 0, pitch = 0;
+    if (t) {
+      const dx = t.x - this.x, dz = t.z - this.z;
+      const dy = t.y - (this.group.position.y + (this.headHeight || 1.4) * 0.9);
+      const c = Math.cos(this.heading), s = Math.sin(this.heading);
+      const lx = dx * c - dz * s, lz = dx * s + dz * c;
+      yaw = Math.atan2(lx, lz);
+      if (Math.abs(yaw) > 1.7) yaw = 0; // behind us: don't twist the neck
+      yaw = clamp(yaw, -1.1, 1.1);
+      pitch = clamp(-Math.atan2(dy, Math.hypot(dx, dz)), -0.5, 0.45);
+    }
+    this.lookYaw = damp(this.lookYaw || 0, yaw, 6, dt);
+    this.lookPitch = damp(this.lookPitch || 0, pitch, 6, dt);
+    if (Math.abs(this.lookYaw) + Math.abs(this.lookPitch) < 0.002) return;
+    _e.set(this.lookPitch * 0.6, this.lookYaw * 0.6, 0, 'YXZ');
+    pose.rot.head.multiply(_q.setFromEuler(_e));
+    _e.set(this.lookPitch * 0.4, this.lookYaw * 0.4, 0, 'YXZ');
+    pose.rot.neck.multiply(_q.setFromEuler(_e));
   }
 
   // ------------------------------------------------------------------ attachments

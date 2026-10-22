@@ -145,16 +145,16 @@ export class Fight {
       const sp = dist > 2.2 ? 3 : 1.4;
       const step = Math.min(dist - range, sp * dt);
       _v.set(target.x - res.x, 0, target.z - res.z).normalize().multiplyScalar(step);
-      res.placeAt(res.x + _v.x, res.z + _v.z);
+      res.placeAt(res.x + _v.x, res.z + _v.z, false); res.pushOutOfObstacles();
       res.play(dist > 2.2 ? 'run' : 'guard');
     } else if (dist < range - 0.2) {
       _v.set(res.x - target.x, 0, res.z - target.z).normalize().multiplyScalar(dt * 0.8);
-      res.placeAt(res.x + _v.x, res.z + _v.z);
+      res.placeAt(res.x + _v.x, res.z + _v.z, false); res.pushOutOfObstacles();
     } else {
       // circle a little
       const side = Math.sin(this.t * 0.7 + (s.side ? 2 : 0)) * 0.25 * dt;
       _v.set(target.z - res.z, 0, -(target.x - res.x)).normalize().multiplyScalar(side);
-      res.placeAt(res.x + _v.x, res.z + _v.z);
+      res.placeAt(res.x + _v.x, res.z + _v.z, false); res.pushOutOfObstacles();
       if (res.player.action !== 'guard') res.play('guard');
     }
     s.cd -= dt;
@@ -220,7 +220,7 @@ export class Fight {
     // knockback
     const knock = (mv.knock || 0.25) * (dmg / 12);
     _v.set(def.x - att.x, 0, def.z - att.z).normalize();
-    def.placeAt(def.x + _v.x * knock, def.z + _v.z * knock);
+    def.placeAt(def.x + _v.x * knock, def.z + _v.z * knock, false); def.pushOutOfObstacles();
     def.setExpression({ angry: 0.5, sad: 0.6, surprised: 0.3 });
     // injuries
     const mult = INTENSITY[sim.settings.conflict] ?? 1;

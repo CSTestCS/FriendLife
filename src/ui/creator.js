@@ -3,6 +3,7 @@
 import { h, openModal, toast, pickFiles, esc } from './dom.js';
 import { TRAITS, personalityLabel, FOODS, CATCHPHRASES, DOLL_PALETTES } from '../sim/data.js';
 import { newResidentData, randomTraits, randomDoll } from '../sim/resident.js';
+import { defaultVoice } from '../engine/voice.js';
 import { HAIR_STYLES, BOTTOM_STYLES, DOLL_DEFAULTS } from '../characters/rig.js';
 import { Avatar } from '../characters/avatar.js';
 import { parseVRM, disposeVRM } from '../characters/loaders.js';
@@ -58,6 +59,22 @@ export function openCreator(app, res = null, preset = {}) {
         traitBox, h('div', {}, h('button', { class: 'small', onclick: () => { d.traits = randomTraits(); renderTraits(); pLabel.textContent = personalityLabel(d.traits); } }, '🎲 Randomize')),
         h('div', { class: 'hint' }, 'Temper & kindness drive arguments and fights. Sociability drives chatting. Confidence affects fighting and confessing.')));
 
+      // --- voice
+      d.voice ||= defaultVoice(d.gender);
+      const voices = sim.voice.voiceList();
+      const vbox = h('div', { class: 'card', style: { marginBottom: '10px' } });
+      vbox.append(
+        h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Name pronunciation'), h('input', { type: 'text', value: d.sayName || '', placeholder: d.name, style: { flex: 1 }, oninput: (e) => { d.sayName = e.target.value; } })),
+        slider('Pitch', d.voice.pitch ?? 1, 0.1, 2, (v) => { d.voice.pitch = v; }),
+        slider('Speed', d.voice.rate ?? 1, 0.5, 2, (v) => { d.voice.rate = v; }),
+        slider('Babble tone', d.voice.babble ?? 1, 0.5, 2, (v) => { d.voice.babble = v; }),
+        voices.length ? h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Voice'), select([['', 'Default'], ...voices.map((v) => [v.name, `${v.name} (${v.lang})`])], d.voice.voiceName || '', (v) => { d.voice.voiceName = v; })) : h('div', { class: 'hint' }, 'No text-to-speech voices found on this system — babble voice will be used.'),
+        h('div', { class: 'row' },
+          h('button', { class: 'small', onclick: () => sim.voice.speak(`Hi! I'm ${d.sayName || d.name}! ${d.catchphrase}`, d.voice, { mode: 'speech', force: true }) }, '🔊 Test speech'),
+          h('button', { class: 'small', onclick: () => { sim.audio.start(); sim.voice.speak(`Hi! I'm ${d.name}! ${d.catchphrase}`, d.voice, { mode: 'babble', force: true }); } }, '🔊 Test babble')),
+      );
+      left.append(h('div', { class: 'field' }, h('label', {}, 'Voice'), vbox));
+
       // --- foods
       const foodOpts = FOODS.map((f) => [f.id, `${f.icon} ${f.name}`]);
       left.append(h('div', { class: 'row' },
@@ -92,7 +109,7 @@ export function openCreator(app, res = null, preset = {}) {
           appearance.append(slider('Height', doll.height ?? 1, 0.8, 1.2, (v) => { doll.height = v; }), slider('Build', doll.build ?? 1, 0.8, 1.25, (v) => { doll.build = v; }));
           appearance.append(h('button', { class: 'small', onclick: () => { d.look.doll = randomDoll(d.gender); renderAppearance(); } }, '🎲 Random look'));
         } else {
-          const chars = lib.list('character');
+          const chars = lib.list('character').filter((c) => !lib.getMeta(c.id).owner || lib.getMeta(c.id).owner === d.id);
           if (!chars.length) {
             appearance.append(h('div', { class: 'card' }, h('p', {}, 'No VRM characters imported yet.'), importBtn('character', () => renderAppearance())));
             return;
@@ -173,7 +190,7 @@ export function openCreator(app, res = null, preset = {}) {
     if (editing) {
       const avatarChanged = JSON.stringify([res.d.look, res.d.outfit, res.d.scale]) !== JSON.stringify([d.look, d.outfit, d.scale]);
       const renamed = res.d.name !== d.name;
-      Object.assign(res.d, { name: d.name, gender: d.gender, catchphrase: d.catchphrase, traits: d.traits, favFood: d.favFood, hatedFood: d.hatedFood, look: d.look, outfit: d.outfit, scale: d.scale });
+      Object.assign(res.d, { voice: d.voice, sayName: d.sayName, name: d.name, gender: d.gender, catchphrase: d.catchphrase, traits: d.traits, favFood: d.favFood, hatedFood: d.hatedFood, look: d.look, outfit: d.outfit, scale: d.scale });
       if (renamed) sim.island.renameHouse(sim.island.houseOf(res.id), d.name);
       if (avatarChanged) {
         toast('Updating look…');

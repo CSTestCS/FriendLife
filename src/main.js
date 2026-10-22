@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { Stage } from './engine/stage.js';
 import { Weather } from './engine/weather.js';
 import { AudioEngine } from './engine/audio.js';
+import { VoiceEngine } from './engine/voice.js';
+import { openDictionary } from './ui/dictionary.js';
 import { Effects } from './engine/fx.js';
 import { TextureStore } from './engine/textures.js';
 import { Island } from './world/island.js';
@@ -22,6 +24,7 @@ class App {
   async init() {
     this.stage = new Stage($('#viewport'));
     this.audio = new AudioEngine();
+    this.voice = new VoiceEngine(this.audio);
     this.library = new Library();
     await this.library.init();
     this.textures = new TextureStore(this.library);
@@ -31,7 +34,7 @@ class App {
     this.weather = new Weather(this.stage, this.audio);
     this.effects = new Effects(this.stage.scene);
     this.sim = new Sim({
-      stage: this.stage, island: this.island, weather: this.weather, audio: this.audio,
+      stage: this.stage, island: this.island, weather: this.weather, audio: this.audio, voice: this.voice,
       library: this.library, registry: this.registry, textures: this.textures, effects: this.effects,
     });
     this.hud = new Hud(this);
@@ -132,6 +135,7 @@ class App {
   openStudio(assetId) { openStudio(this, assetId); }
   openShop() { openShop(this); }
   openNews() { openNews(this); }
+  openDictionary() { openDictionary(this); }
   openSettings(focus) { openSettings(this, focus); }
   toggleBuild() { this.build.toggle(); }
 

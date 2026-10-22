@@ -12,7 +12,7 @@ export const ASSET_TYPES = {
   character: { label: 'Characters', exts: ['vrm'], folder: 'characters' },
   outfit: { label: 'Outfits & Parts', exts: ['vrm'], folder: 'outfits' },
   texture: { label: 'Textures', exts: ['png', 'jpg', 'jpeg', 'webp'], folder: 'textures' },
-  animation: { label: 'Animations', exts: ['vrma', 'json'], folder: 'animations' },
+  animation: { label: 'Animations', exts: ['vrma', 'fbx', 'json'], folder: 'animations' },
 };
 
 function openDB() {
@@ -44,7 +44,7 @@ function tx(db, store, mode, fn) {
 
 export function guessType(fileName) {
   const ext = fileExt(fileName);
-  if (ext === 'vrma' || ext === 'json') return 'animation';
+  if (ext === 'vrma' || ext === 'json' || ext === 'fbx') return 'animation';
   if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) return 'texture';
   if (ext === 'vrm') return 'character';
   return null;

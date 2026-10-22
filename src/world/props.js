@@ -351,6 +351,8 @@ export function makeSnowman() {
 export function makeStage() {
   const g = new THREE.Group();
   g.add(box(4.5, 0.4, 3, stdMat('#8b5e3c', { roughness: 0.6, porosity: 0.5 }), 0, 0.2, 0));
+  // front step so residents can climb up
+  g.add(box(1.8, 0.2, 0.55, stdMat('#7a5134', { roughness: 0.6, porosity: 0.5 }), 0, 0.1, 1.77));
   const pole = stdMat('#4d4d4d', { metalness: 0.6, roughness: 0.4 });
   for (const x of [-2.1, 2.1]) g.add(cyl(0.06, 0.06, 3, pole, 6, x, 1.9, -1.3));
   g.add(box(4.4, 0.15, 0.15, pole, 0, 3.4, -1.3));

@@ -10,6 +10,7 @@ import {
 import { rand, uid } from '../core/util.js';
 
 export const ISLAND_RADIUS = 44;
+const STAGE_ROT = Math.atan2(6, -12); // front of the stage faces the plaza
 
 function fract(x) { return x - Math.floor(x); }
 function hash2(x, z) { return fract(Math.sin(x * 127.1 + z * 311.7) * 43758.5453); }
@@ -124,10 +125,17 @@ export class Island {
     // stage for dancing
     const stage = makeStage();
     stage.position.set(-6, 0, 12);
-    stage.rotation.y = 0.3;
+    stage.rotation.y = STAGE_ROT;
     this.group.add(stage);
-    this.addObstacle(-6, 12, 1.8, { soft: true });
-    this.addLocation('stage', { pos: [-6, 12.2], radius: 1.5, label: 'Stage', outdoor: true });
+    // The stage is a walkable platform (0.4 m) with a 0.2 m step in front; only its poles block.
+    this.addPlatform(-6, 12, STAGE_ROT, 2.25, 1.5, 0.4);
+    this.addPlatform(-6, 12, STAGE_ROT, 0.9, 0.28, 0.2, 0, 1.77);
+    for (const lx of [-2.1, 2.1]) {
+      const p = this.localToWorld(-6, 12, STAGE_ROT, lx, -1.3);
+      this.addObstacle(p.x, p.z, 0.25);
+    }
+    const entry = this.localToWorld(-6, 12, STAGE_ROT, 0, 2.6);
+    this.addLocation('stage', { pos: [-6, 12], radius: 1.5, label: 'Stage', outdoor: true, entry: [entry.x, entry.z], y: 0.4, rotY: STAGE_ROT });
 
     // ---- buildings around the plaza ----
     const placeBuilding = (key, obj, x, z, rotY, label, depth, radius) => {
@@ -219,6 +227,10 @@ export class Island {
     const pierEnd = new THREE.Vector3(0, 0, 9).applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.3).add(pier.position);
     this.addLocation('pier', { pos: [pierEnd.x, pierEnd.z], radius: 0.6, label: 'Pier', outdoor: true, y: 0.4, rotY: -0.3 });
     this.pierInfo = { start: pier.position.clone(), end: pierEnd, rot: -0.3 };
+    {
+      const c = this.localToWorld(pier.position.x, pier.position.z, -0.3, 0, 4.85);
+      this.addPlatform(c.x, c.z, -0.3, 1.1, 5.15, 0.39);
+    }
 
     // palms and scattered trees around the coast
     for (let i = 0; i < 22; i++) {
@@ -256,6 +268,26 @@ export class Island {
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (!this.isBlocked(x, z, 1)) this.lookouts.push({ x, z, rot: Math.atan2(x, z) });
     }
+  }
+
+  /** Walkable box top (stage, pier, steps…). Rotated rectangle with half sizes hw/hd. */
+  addPlatform(x, z, rot, hw, hd, top, lx = 0, lz = 0) {
+    const c = lx || lz ? this.localToWorld(x, z, rot, lx, lz) : { x, z };
+    const p = { x: c.x, z: c.z, rot, hw, hd, top };
+    (this.platforms ||= []).push(p);
+    return p;
+  }
+
+  /** A random standing spot on the stage plus the walk-in point. */
+  stageSpot() {
+    const s = this.locations.stage;
+    const p = this.localToWorld(s.x, s.z, s.rotY, rand(-1.5, 1.5), rand(-0.9, 0.6));
+    return { x: p.x, z: p.z, entry: s.entry, heading: s.rotY };
+  }
+
+  localToWorld(x, z, rot, lx, lz) {
+    const c = Math.cos(rot), s = Math.sin(rot);
+    return { x: x + lx * c + lz * s, z: z - lx * s + lz * c };
   }
 
   addLocation(key, data) {
@@ -410,12 +442,14 @@ export class Island {
   }
 
   heightAt(x, z) {
-    // pier deck
-    if (this.pierInfo) {
-      const p = new THREE.Vector3(x, 0, z).sub(this.pierInfo.start).applyAxisAngle(new THREE.Vector3(0, 1, 0), -this.pierInfo.rot);
-      if (Math.abs(p.x) < 1.1 && p.z > -0.3 && p.z < 10) return 0.39;
+    let h = Math.max(terrainHeight(x, z), -0.5);
+    for (const p of this.platforms || []) {
+      const dx = x - p.x, dz = z - p.z;
+      const c = Math.cos(p.rot), s = Math.sin(p.rot);
+      const lx = dx * c - dz * s, lz = dx * s + dz * c;
+      if (Math.abs(lx) <= p.hw && Math.abs(lz) <= p.hd && p.top > h) h = p.top;
     }
-    return Math.max(terrainHeight(x, z), -0.5);
+    return h;
   }
 
   update(dt, light) {

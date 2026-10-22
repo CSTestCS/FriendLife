@@ -6,7 +6,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const MOD_TYPES = { characters: 'character', outfits: 'outfit', textures: 'texture', animations: 'animation' };
-const EXTS = { character: ['.vrm'], outfit: ['.vrm'], texture: ['.png', '.jpg', '.jpeg', '.webp'], animation: ['.vrma', '.json'] };
+const EXTS = { character: ['.vrm'], outfit: ['.vrm'], texture: ['.png', '.jpg', '.jpeg', '.webp'], animation: ['.vrma', '.fbx', '.json'] };
 
 function modsRoots() {
   // Portable exe: next to the .exe the user launched. Otherwise next to the app / user data.
@@ -31,7 +31,7 @@ function ensureModFolders() {
         '  characters/   .vrm   VRoid / VRM avatars that can become residents',
         '  outfits/      .vrm   VRoid models whose clothes get fitted onto residents',
         '  textures/     .png .jpg .webp   textures for the Wardrobe and island surfaces',
-        '  animations/   .vrma .json   VRM Animations or FriendLife JSON keyframe animations',
+        '  animations/   .vrma .fbx .json   VRM Animations, Mixamo FBX animations, or FriendLife JSON keyframe animations',
         '',
       ].join('\r\n'));
     }

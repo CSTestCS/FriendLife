@@ -8,7 +8,7 @@ const OUT = process.env.SHOTS || 'shots';
 const base = path.join(__dirname, '..');
 const server = http.createServer((req, res) => {
   let u = decodeURIComponent(req.url.split('?')[0]);
-  const p = u.startsWith('/samples/') ? path.join(base, u) : path.join(base, 'dist', u === '/' ? 'index.html' : u);
+  const p = u.startsWith('/samples/') ? path.join(base, u) : u.startsWith('/extra/') && process.env.EXTRA_DIR ? path.join(process.env.EXTRA_DIR, u.slice(7)) : path.join(base, 'dist', u === '/' ? 'index.html' : u);
   if (!fs.existsSync(p)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'content-type': p.endsWith('.html') ? 'text/html' : p.endsWith('.js') ? 'text/javascript' : p.endsWith('.css') ? 'text/css' : 'application/octet-stream' });
   fs.createReadStream(p).pipe(res);
@@ -73,6 +73,67 @@ const server = http.createServer((req, res) => {
   await page.evaluate(() => { const [r1, r2] = window.__freeze; r1.addInjury('brokenArm'); r1.addInjury('concussion'); r2.addInjury('blackEye'); r2.addInjury('sprain'); r2.play('limp'); });
   await page.waitForTimeout(2000);
   await page.screenshot({ path: `${OUT}/v4-injuries.png` });
+  // ---- new features: Mixamo FBX, personal outfits, stage IK, dialogue
+  const extra = await page.evaluate(async (hasFbx) => {
+    const a = window.__friendlife;
+    const s = a.sim;
+    const lib = s.library;
+    const out = {};
+    const [r1, r2, r3] = window.__freeze;
+    if (hasFbx) {
+      const data = await (await fetch('/extra/samba.fbx')).arrayBuffer();
+      const asset = await lib.add({ name: 'Samba Dancing', type: 'animation', data, ext: 'fbx' });
+      const clip = await s.registry.loadAsset(asset.id);
+      out.fbx = clip ? { dur: +clip.duration.toFixed(2), bones: Object.keys(clip.interps).length } : s.registry.errors.get(asset.id);
+      if (clip) { r3.play(asset.id); r1.play(asset.id); }
+    }
+    // personal outfit: r3 (doll) gets the VRM0 mannequin as an alternate outfit, tagged for rain
+    const v0 = lib.list('character').find((c) => c.name.includes('VRM0'));
+    r3.d.outfits.push({ name: 'Rain gear', look: { kind: 'vrm', assetId: v0.id, variantId: null }, outfit: null, custom: { textures: {}, tints: {}, hidden: [] }, tags: ['rain'] });
+    await s.changeOutfit(r3, 0);
+    out.outfit = { wearing: r3.d.wearing, kind: r3.avatar.kind, cached: r3.avatarCache.size };
+    await s.changeOutfit(r3, -1);
+    out.back = { wearing: r3.d.wearing, kind: r3.avatar.kind };
+    await s.changeOutfit(r3, 0);
+    // dialogue
+    s.dialogue.addTerm('food', 'Space Tacos', 'space tah-cohs', r1.id);
+    s.dialogue.addTerm('insult', 'a soggy waffle', '', null);
+    out.lines = [s.dialogue.chat(r1, r2).map((l) => `${l.who}: ${l.text}`).join(' / '), s.dialogue.line('insult', { a: r1, b: r2 }).text, s.dialogue.taught(r1, { text: 'Space Tacos' }).text];
+    s.problems.offer(r2, 'teachWord', { category: 'hobby' });
+    out.problem = s.problems.describe(r2)?.text;
+    return out;
+  }, !!process.env.EXTRA_DIR);
+  console.log(JSON.stringify(extra, null, 1));
+  await page.evaluate(() => { const a = window.__friendlife; a.sim.weather.set('sunny', true); a.sim.weather.p.rain = 0; a.sim.weather.wetness = 0; for (const r of window.__freeze) { r.d.wetness = 0; r.avatar.setWetness(0); } });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${OUT}/v5-fbx-outfit.png` });
+  // stage: put residents on the stage, one straddling the front edge
+  await page.evaluate(() => {
+    const a = window.__friendlife;
+    const st = a.island.locations.stage;
+    const [r1, r2, r3] = window.__freeze;
+    const on = a.island.localToWorld(st.x, st.z, st.rotY, -0.8, 0);
+    const edge = a.island.localToWorld(st.x, st.z, st.rotY, 2.25, 0.3);
+    const off = a.island.localToWorld(st.x, st.z, st.rotY, 2.0, 2.4);
+    for (const [r, p] of [[r1, on], [r2, edge], [r3, off]]) { r.placeAt(p.x, p.z); r.heading = st.rotY; r.targetHeading = st.rotY; r.play('idle'); }
+    window.__ik = { on: a.island.heightAt(on.x, on.z), edge: a.island.heightAt(edge.x, edge.z), off: a.island.heightAt(off.x, off.z) };
+    const fwd = { x: Math.sin(st.rotY), z: Math.cos(st.rotY) };
+    a.stage.controls.target.set(edge.x, 1.0, edge.z);
+    a.stage.camera.position.set(edge.x + fwd.x * 5 - fwd.z * 2.5, 1.9, edge.z + fwd.z * 5 + fwd.x * 2.5);
+  });
+  await page.waitForTimeout(2500);
+  const ik = await page.evaluate(() => {
+    const [, r2] = window.__freeze;
+    const V = r2.group.position.constructor;
+    const l = new V(), rr = new V();
+    r2.avatar.getBone('leftFoot').getWorldPosition(l);
+    r2.avatar.getBone('rightFoot').getWorldPosition(rr);
+    const isl = window.__friendlife.island;
+    return { heights: window.__ik, rootY: +r2.group.position.y.toFixed(2), drop: +(r2.avatar.ikDrop || 0).toFixed(2),
+      left: { y: +l.y.toFixed(2), ground: +isl.heightAt(l.x, l.z).toFixed(2) }, right: { y: +rr.y.toFixed(2), ground: +isl.heightAt(rr.x, rr.z).toFixed(2) } };
+  });
+  console.log('IK', JSON.stringify(ik));
+  await page.screenshot({ path: `${OUT}/v6-stage-ik.png` });
   console.log('ERRORS:', errors.length);
   console.log(errors.slice(0, 30).join('\n'));
   await browser.close();

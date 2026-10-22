@@ -92,6 +92,25 @@ const server = http.createServer((req, res) => {
   await shot('11-settings');
   await clickText('.modal button', 'Thunderstorm');
   await closeModal();
+  // dictionary + teach a word
+  await clickText('#topbar button', 'Words');
+  await page.locator('.modal .card').first().locator('button').first().click();
+  await page.waitForTimeout(400);
+  await page.locator('.modal input[type=text]').last().fill('x');
+  await page.locator('.modal').last().locator('input[type=text]').first().fill('Bubble Tea');
+  await page.locator('.modal').last().locator('.modal-foot button', { hasText: 'Teach' }).click();
+  await page.waitForTimeout(400);
+  await shot('12a-words');
+  await closeModal();
+  await page.locator('.res-card').first().click();
+  await page.waitForTimeout(500);
+  await clickText('#panel button', 'Teach word');
+  await clickText('.modal button', 'Hobby');
+  await page.locator('.modal').last().locator('input[type=text]').first().fill('extreme ironing');
+  await page.locator('.modal').last().locator('.modal-foot button', { hasText: 'Teach' }).click();
+  await page.waitForTimeout(600);
+  await page.locator('#panel').evaluate((el) => { el.scrollTop = 600; });
+  await shot('12b-closet');
   // news
   await clickText('#topbar button', 'News');
   await shot('12-news');
@@ -122,7 +141,7 @@ const server = http.createServer((req, res) => {
   await page.waitForFunction(() => window.__friendlife?.sim?.residents?.length >= 7, null, { timeout: 60000 });
   await page.waitForTimeout(2000);
   await shot('17-continued');
-  const info = await page.evaluate(() => ({ n: window.__friendlife.sim.residents.length, kinds: window.__friendlife.sim.residents.map((r) => r.avatar?.kind), money: window.__friendlife.sim.money, inv: window.__friendlife.sim.inventory, props: window.__friendlife.island.props.length }));
+  const info = await page.evaluate(() => ({ n: window.__friendlife.sim.residents.length, kinds: window.__friendlife.sim.residents.map((r) => r.avatar?.kind), money: window.__friendlife.sim.money, inv: window.__friendlife.sim.inventory, props: window.__friendlife.island.props.length, terms: window.__friendlife.sim.dialogue.terms }));
   console.log(JSON.stringify(info));
   console.log('ERRORS:', errors.length);
   console.log(errors.slice(0, 30).join('\n'));

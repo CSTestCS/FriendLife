@@ -137,6 +137,8 @@ function buildScript(it) {
   const S = [];
   const news = (text, icon) => sim.news(text, icon);
   const conflictMul = CONFLICT_MUL[sim.settings.conflict] ?? 1;
+  // dictionary-aware lines ({food}, {hobby}, {insult}… use words the player taught)
+  const D = (key, swap) => sim.dialogue.line(key, swap ? { a: b, b: a } : { a, b });
 
   const maybeEscalate = (heat) => {
     if (conflictMul <= 0.6) return false; // 'mild' never escalates into fists
@@ -151,14 +153,14 @@ function buildScript(it) {
 
   switch (kind) {
     case 'chat': {
-      const n = 2 + Math.floor(rand(0, 3));
-      for (let i = 0; i < n; i++) {
-        const aTalks = i % 2 === 0;
-        S.push({
-          dur: rand(2.2, 3.2),
-          a: aTalks ? TALK(i === 0 ? line('greet') : '', topic(), { happy: 0.4 }) : LISTEN({ happy: 0.3 }),
-          b: aTalks ? LISTEN({ happy: 0.3 }) : TALK('', topic(), { happy: 0.4 }),
-        });
+      S.push({ dur: 1.8, a: TALK(D('greet'), '👋', { happy: 0.5 }), b: LISTEN({ happy: 0.4 }) });
+      const rounds = chance(0.5) ? 2 : 1;
+      for (let r = 0; r < rounds; r++) {
+        for (const ln of sim.dialogue.chat(r % 2 ? b : a, r % 2 ? a : b)) {
+          const speaker = (ln.who === 'a') === (r % 2 === 0) ? 'a' : 'b';
+          const mood = /😤|🙄|😒|🤢|😏/.test(ln.emoji) ? { angry: 0.3 } : { happy: 0.5 };
+          S.push({ dur: Math.min(4.5, 1.6 + ln.text.length * 0.045), [speaker]: TALK(ln, ln.emoji, mood), [speaker === 'a' ? 'b' : 'a']: LISTEN({ happy: 0.3 }) });
+        }
       }
       const fun = chance(0.4 + (a.t.quirk + b.t.quirk) * 0.2);
       if (fun) S.push({ dur: 2, a: { anim: 'laugh', expr: { happy: 1 }, emoji: '😆' }, b: { anim: 'laugh', expr: { happy: 1 } } });
@@ -179,7 +181,7 @@ function buildScript(it) {
       break;
     }
     case 'joke': {
-      S.push({ dur: 3, a: TALK(line('joke'), '😜', { happy: 0.6 }), b: LISTEN() });
+      S.push({ dur: 3, a: TALK(D('joke'), '😜', { happy: 0.6 }), b: LISTEN() });
       const lands = chance(0.45 + b.t.quirk * 0.3 + b.t.energy * 0.2);
       if (lands) {
         S.push({ dur: 2.2, a: { anim: 'laugh', expr: { happy: 1 } }, b: { anim: 'laugh', expr: { happy: 1 }, emoji: '🤣' } });
@@ -192,7 +194,7 @@ function buildScript(it) {
       break;
     }
     case 'compliment': {
-      S.push({ dur: 2.8, a: TALK(line('compliment'), '✨', { happy: 0.6 }), b: LISTEN({ surprised: 0.3 }) });
+      S.push({ dur: 2.8, a: TALK(D('compliment'), '✨', { happy: 0.6 }), b: LISTEN({ surprised: 0.3 }) });
       S.push({ dur: 2.5, b: { anim: 'shy', expr: { happy: 0.6, blush: 1 }, emoji: '☺️' }, a: { anim: 'idle', expr: { happy: 0.6 } } });
       S.push({ dur: 0.1, fn: () => { b.changeRel(a.id, 7); a.changeRel(b.id, 3); b.d.happiness = clamp(b.d.happiness + 5, 0, 100); sim.social.maybeCrush(b, a); } });
       break;
@@ -205,7 +207,7 @@ function buildScript(it) {
       break;
     }
     case 'hug': {
-      S.push({ dur: 1.5, a: TALK(line('greet'), '🤗', { happy: 0.8 }), b: { anim: 'idle', expr: { happy: 0.7 } } });
+      S.push({ dur: 1.5, a: TALK(D('greet'), '🤗', { happy: 0.8 }), b: { anim: 'idle', expr: { happy: 0.7 } } });
       S.push({ dur: 2.5, a: { anim: 'hug', expr: { happy: 1 } }, b: { anim: 'hug', expr: { happy: 1 }, emoji: '💕' } });
       S.push({ dur: 0.1, fn: () => { a.changeRel(b.id, 6); b.changeRel(a.id, 6); a.d.happiness = clamp(a.d.happiness + 5, 0, 100); b.d.happiness = clamp(b.d.happiness + 5, 0, 100); } });
       break;
@@ -262,10 +264,10 @@ function buildScript(it) {
     }
     case 'argue': {
       const rounds = 2 + Math.floor(rand(0, 2));
-      S.push({ dur: 2.4, a: { anim: 'argue', say: line('argue'), expr: { angry: 0.9 }, emoji: '💢' }, b: { anim: 'idle', expr: { surprised: 0.5 } }, sfx: 'angry' });
+      S.push({ dur: 2.4, a: { anim: 'argue', say: D('argue'), expr: { angry: 0.9 }, emoji: '💢' }, b: { anim: 'idle', expr: { surprised: 0.5 } }, sfx: 'angry' });
       for (let i = 0; i < rounds; i++) {
-        S.push({ dur: 2.2, b: { anim: 'argue', say: line('argueBack'), expr: { angry: 0.9 }, emoji: '💢' }, a: { anim: 'angry', expr: { angry: 1 } } });
-        S.push({ dur: 2.2, a: { anim: 'argue', say: line('argue'), expr: { angry: 1 }, emoji: '💢' }, b: { anim: 'angry', expr: { angry: 1 } } });
+        S.push({ dur: 2.2, b: { anim: 'argue', say: D('argueBack', true), expr: { angry: 0.9 }, emoji: '💢' }, a: { anim: 'angry', expr: { angry: 1 } } });
+        S.push({ dur: 2.2, a: { anim: 'argue', say: D('argue'), expr: { angry: 1 }, emoji: '💢' }, b: { anim: 'angry', expr: { angry: 1 } } });
       }
       const fight = maybeEscalate(0.05);
       S.push({
@@ -285,7 +287,7 @@ function buildScript(it) {
       break;
     }
     case 'insult': {
-      S.push({ dur: 2.6, a: { anim: 'taunt', say: line('insult'), expr: { happy: 0.5, angry: 0.3 }, emoji: '😏' }, b: { anim: 'idle', expr: { surprised: 0.8 } } });
+      S.push({ dur: 2.6, a: { anim: 'taunt', say: D('insult'), expr: { happy: 0.5, angry: 0.3 }, emoji: '😏' }, b: { anim: 'idle', expr: { surprised: 0.8 } } });
       const timid = b.t.confidence < 0.45 && b.t.temper < 0.6;
       if (timid) {
         S.push({ dur: 3, b: { anim: 'cry', say: line('hurtReply'), expr: { sad: 1 }, emoji: '😢' }, a: { anim: 'laugh', expr: { happy: 0.8 } }, sfx: 'sad' });
@@ -333,7 +335,7 @@ function buildScript(it) {
         S.push({ dur: 2.5, b: { anim: 'shy', say: 'We were just talking!', expr: { sad: 0.6 } }, a: { anim: 'angry', expr: { angry: 1 } } });
         S.push({ dur: 0.1, fn: () => { a.changeRel(b.id, -8); b.changeRel(a.id, -5); ra.grudge = clamp(ra.grudge + 10, 0, 100); news(`${a.name} got jealous and confronted ${b.name} about ${c.name}.`, '😤'); } });
       } else {
-        S.push({ dur: 2.4, b: { anim: 'argue', say: line('argueBack'), expr: { angry: 1 }, emoji: '💢' }, a: { anim: 'angry', expr: { angry: 1 } } });
+        S.push({ dur: 2.4, b: { anim: 'argue', say: D('argueBack', true), expr: { angry: 1 }, emoji: '💢' }, a: { anim: 'angry', expr: { angry: 1 } } });
         const fight = maybeEscalate(0.2);
         S.push({ dur: 0.1, fn: () => { a.changeRel(b.id, -14); b.changeRel(a.id, -12); ra.grudge = clamp(ra.grudge + 20, 0, 100); rb.grudge = clamp(rb.grudge + 15, 0, 100); news(`Love triangle! ${a.name} blew up at ${b.name} over ${c.name}.`, '💥'); } });
         if (fight) it.next = () => sim.fights.start(a, b, 'jealousy');
@@ -341,7 +343,7 @@ function buildScript(it) {
       break;
     }
     case 'cold': {
-      S.push({ dur: 1.6, a: TALK(line('greet'), '👋', { happy: 0.3 }), b: { anim: 'idle', expr: { angry: 0.5 } } });
+      S.push({ dur: 1.6, a: TALK(D('greet'), '👋', { happy: 0.3 }), b: { anim: 'idle', expr: { angry: 0.5 } } });
       S.push({ dur: 2.5, b: { anim: 'sulk', say: line('cold'), expr: { angry: 0.7 }, emoji: '😤', turnAway: true }, a: { anim: 'idle', expr: { sad: 0.6 } } });
       S.push({ dur: 1.5, a: { anim: 'idle', expr: { sad: 0.8 }, emoji: '😞' } });
       S.push({ dur: 0.1, fn: () => { a.changeRel(b.id, -3); a.d.happiness = clamp(a.d.happiness - 6, 0, 100); } });
@@ -390,7 +392,7 @@ function buildScript(it) {
       break;
     }
     default:
-      S.push({ dur: 2, a: TALK(line('greet')), b: LISTEN() });
+      S.push({ dur: 2, a: TALK(D('greet')), b: LISTEN() });
   }
   return S;
 }

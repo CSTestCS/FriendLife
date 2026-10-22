@@ -5,6 +5,7 @@ import { h, openModal, toast, pickFiles, prompt, confirmBox, download, esc, choo
 import { ASSET_TYPES, guessType } from '../core/library.js';
 import { ACTION_LIST, BUILTIN_ANIMATIONS } from '../characters/builtinAnims.js';
 import { fileExt } from '../core/util.js';
+import { AnimationRegistry } from '../characters/registry.js';
 
 export async function importFiles(app, files, forcedType) {
   const lib = app.sim.library;
@@ -28,6 +29,12 @@ export async function importFiles(app, files, forcedType) {
       if (type === 'animation') {
         const clip = await app.sim.registry.loadAsset(asset.id);
         if (!clip) { toast(`Imported ${asset.name}, but it failed to load: ${app.sim.registry.errors.get(asset.id)}`); continue; }
+        const act = AnimationRegistry.guessAction(asset.name);
+        const reg = app.sim.registry;
+        if (act && !reg.actionMap[act]) {
+          reg.actionMap[act] = asset.id;
+          toast(`“${asset.name}” will be used for ${act} (change it in Library → Animations).`, 5000);
+        }
       }
       count++;
       toast(`Imported ${ASSET_TYPES[type].label.replace(/s$/, '').toLowerCase()}: ${asset.name}`);
@@ -93,6 +100,8 @@ export function openLibrary(app, tab = 'character') {
           lib.getData(a.id).then((data) => { const u = URL.createObjectURL(new Blob([data])); urls.push(u); img.src = u; }).catch(() => {});
           el.append(img);
         } else el.append(h('span', { style: { fontSize: '24px' } }, { character: '🧍', outfit: '👕', animation: '🎞️' }[a.type]));
+        const owner = lib.getMeta(a.id).owner ? sim.byId(lib.getMeta(a.id).owner) : null;
+        if (owner) el.append(h('span', { class: 'badge', title: 'Personal outfit model' }, `👤 ${owner.name}'s`));
         el.append(name, h('span', { class: 'badge' }, a.source === 'mod' ? 'mods folder' : 'imported'), h('span', { class: 'badge' }, `${(a.size / 1024 / 1024).toFixed(1)} MB`));
         const grow = h('div', { class: 'grow' });
         el.append(grow);
@@ -172,5 +181,5 @@ const HELP = {
   character: 'VRoid Studio: Export → VRM (0.x or 1.0). Each character can have many variants (texture swaps, tints, hidden parts).',
   outfit: 'Import a VRoid model wearing the clothes you want. Its Tops / Bottoms / Shoes / Accessory parts are fitted onto any resident\'s skeleton. Works best between VRoid models with similar body shapes.',
   texture: 'PNG / JPG images. Swap them onto avatar or outfit materials in the Wardrobe (use textures exported from VRoid Studio to keep the UV layout), or onto the island ground and paths.',
-  animation: '.vrma (VRM Animation — e.g. from VRoid Hub, Blender VRM add-on, VRM Posing Desktop) or FriendLife JSON keyframe animations. Map them onto actions (walk, dance, punch…) or tick "Idle emote" so residents do them on their own.',
+  animation: '.vrma (VRM Animation — e.g. from VRoid Hub, Blender VRM add-on, VRM Posing Desktop), .fbx from Mixamo (download as FBX, "Without Skin" is fine; tick "In Place" for walks/runs), or FriendLife JSON keyframe animations. Map them onto actions (walk, dance, punch…) or tick "Idle emote" so residents do them on their own.',
 };

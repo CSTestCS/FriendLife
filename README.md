@@ -45,6 +45,16 @@ Conflicts come from personalities (temper, kindness, confidence…), relationshi
 
 Injuries: bruises, black eyes, split lips, broken noses, sprained ankles (residents limp), concussions (dizzy stars, bandage), broken arms (arm sling, can't fight). Running on wet ground can make residents slip; staying soaked too long can give them a cold. Injuries heal over time — faster with first aid or a trip to the clinic. Fights leave grudges, news headlines, and problems to resolve (make up, or… revenge).
 
+### Voices & words
+
+Residents talk with **text-to-speech** (your computer's voices — on Windows the built-in ones) using their own **pitch, speed and voice**, plus a name pronunciation — set in ✏️ Edit → Voice. Settings → Voices switches between *Speech* (for the selected resident or everyone nearby), cute *Babble*, or *Off*.
+
+Like Tomodachi Life, residents ask you to **teach them words** (📖 bubbles): something tasty, a place to visit, a hobby, a cute animal, a scary thing, a song, a silly sound, a nickname, a compliment, an insult, a dream… They use your words in conversations, jokes, compliments and arguments ("You smell like *space tacos*!"). Add a pronunciation so the voices say it right. Manage all words in **📖 Words**, or use **📖 Teach word** on any resident.
+
+### Moving around: collisions & IK
+
+The stage and pier are walkable platforms — residents climb the stage's front step and stand on top. Buildings, trees, benches and other props are solid. **Foot IK** keeps feet planted on uneven ground (stage edges, steps, the pier, slopes) by lowering the hips and bending the knees, and residents **turn their heads** toward whoever they're talking to or fighting (Settings → *Foot IK & head tracking*).
+
 ### Weather
 
 Sunny, partly cloudy, overcast, drizzle, rain, thunderstorm, snow and fog, changing on a forecast every few hours, plus a full day/night cycle. Rain soaks the island and the residents: surfaces darken and turn glossy, water streaks run down walls, puddles with rain ripples form on the ground, and **residents get a wet sheen** (VRM MToon materials get a glossy matcap/rim highlight; PBR materials get a wet shader). Characters dry off indoors or in the sun. Residents with an umbrella use it.
@@ -60,12 +70,22 @@ mods/
   characters/   *.vrm          → residents' bodies
   outfits/      *.vrm          → clothing fitted onto residents
   textures/     *.png *.jpg    → wardrobe & island surfaces
-  animations/   *.vrma *.json  → animations
+  animations/   *.vrma *.fbx *.json  → animations (VRM Animation, Mixamo FBX, FriendLife JSON)
 ```
 
 ### Characters (.vrm)
 
 Export from **VRoid Studio** (`Export → VRM`, 0.x or 1.0 both work) or any VRM tool. Create a resident from it (Library → **＋ New resident**, or **✏️ Edit** an existing resident and pick *VRoid / VRM model*). Facial expressions (happy, angry, sad, surprised, relaxed, blinking, talking) use the model's VRM expressions.
+
+### Personal outfits (alternate models per resident)
+
+Every resident has a **Closet** (side panel). Add outfits that belong only to them:
+
+- **⬆ Import .vrm just for them** — e.g. the same VRoid character exported with different clothes or hair. These models are marked as personal and don't show up for other residents.
+- **📦 Use a model from the Library** — any character model, optionally with a clothing overlay.
+- **⧉ Copy current look** — then restyle it in the 👕 Wardrobe (texture swaps, tints, hidden parts are stored per outfit).
+
+Tag outfits with **Everyday / Sunny / Rain / Snow / Night / Dancing** and residents change into them automatically (with a sparkle) when the weather or time fits. Switching back to a recently worn outfit is instant.
 
 ### Outfits (.vrm)
 
@@ -84,6 +104,7 @@ Used by the Wardrobe (above) and for re-skinning the island's **ground** and **p
 ### Animations (.vrma / .json)
 
 - **.vrma** — the standard VRM Animation format (VRoid Hub, Blender VRM add-on, VRM Posing Desktop, etc.).
+- **.fbx from [Mixamo](https://www.mixamo.com)** — download as *FBX*, with or without skin (tick *In Place* for walks and runs). The Mixamo skeleton is retargeted onto VRM and doll residents automatically. Files named like the action (`Walking.fbx`, `Punching.fbx`, `Hip Hop Dancing.fbx`, `Sitting.fbx`…) are mapped to that action on import.
 - **.json** — FriendLife keyframe animations. Make them in the **🎬 Studio** (pose bones with sliders at keyframes, preview live, save to the library), or write them by hand:
 
 ```json

@@ -3,6 +3,9 @@ import { $, h, esc, bar, openModal, toast, confirmBox } from './dom.js';
 import { personalityLabel, INJURIES, FOODS, foodById, itemById } from '../sim/data.js';
 import { PROBLEM_DEFS } from '../sim/problems.js';
 import { formatClock } from '../core/util.js';
+import { closetSection } from './closet.js';
+import { askWord } from './dictionary.js';
+import { TERM_CATEGORIES } from '../sim/dialogue.js';
 
 export class Panel {
   constructor(app) {
@@ -72,9 +75,13 @@ export class Panel {
       A('🎬 Animate…', () => this.animPicker()),
       A('🏥 Clinic', () => { sim.sendTo(r, 'clinic', 90, () => sim.clinicTreat(r)); toast(`${r.name} is heading to the clinic.`); }, { disabled: !r.d.injuries.length }),
       A('🏠 Go Home', () => { sim.sendTo(r, `home:${r.id}`, 120); }),
+      A('📖 Teach word', () => this.teachWord()),
       A('👕 Wardrobe', () => this.app.openWardrobe(r)),
       A('✏️ Edit', () => this.app.openCreator(r)),
     ));
+
+    // closet (personal alternate outfits / models)
+    el.append(h('h3', {}, 'Closet'), closetSection(this.app, r, () => this.render()));
 
     // injuries
     if (r.d.injuries.length) {
@@ -152,7 +159,39 @@ export class Panel {
     };
     if (option.needs === 'food') return this.foodPicker((f) => finish({ food: f.id }), true);
     if (option.needs === 'wardrobe') { this.app.openWardrobe(r, () => finish({})); return; }
+    if (option.needs === 'text') {
+      const cat = TERM_CATEGORIES[r.d.problem?.category];
+      askWord(this.app, `${r.name} wants to learn a word`, `“${sim.problems.describe(r)?.text}”`).then((w) => { if (w) finish(w); });
+      return;
+    }
     finish({});
+  }
+
+  teachWord() {
+    const r = this.res;
+    const sim = this.sim;
+    const m = openModal({
+      title: `Teach ${r.name} a word`,
+      body: (b) => {
+        b.append(h('p', { class: 'hint' }, 'Pick what kind of word it is. They\'ll use it when they talk!'));
+        const grid = h('div', { class: 'row' });
+        for (const [cat, def] of Object.entries(TERM_CATEGORIES)) {
+          grid.append(h('button', { class: 'small', onclick: async () => {
+            m.close();
+            const w = await askWord(this.app, `${def.icon} ${def.label}`, `${r.name}: “What's ${def.ask}?”`);
+            if (!w) return;
+            const term = sim.dialogue.addTerm(cat, w.text, w.say, r.id);
+            if (!term) return;
+            if (!r.inside && !r.engaged) { r.clearPlan(); r.setPlan([{ kind: 'anim', anim: 'cheer', dur: 2.5, expr: { happy: 1 }, emoji: '📖' }]); }
+            r.say(sim.dialogue.taught(r, term));
+            r.addMemory(`Learned the word “${term.text}”`);
+            sim.gainXp(r, 8);
+            toast(`${r.name} learned “${term.text}”.`);
+          } }, `${def.icon} ${def.label}`));
+        }
+        b.append(grid);
+      },
+    });
   }
 
   foodPicker(cb, onlyOwned = false) {
