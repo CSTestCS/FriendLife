@@ -4,6 +4,7 @@ import { h, openModal, toast, pickFiles, esc } from './dom.js';
 import { TRAITS, personalityLabel, FOODS, CATCHPHRASES, DOLL_PALETTES } from '../sim/data.js';
 import { newResidentData, randomTraits, randomDoll } from '../sim/resident.js';
 import { defaultVoice } from '../engine/voice.js';
+import { openVoiceEditor } from './voiceEditor.js';
 import { HAIR_STYLES, BOTTOM_STYLES, DOLL_DEFAULTS } from '../characters/rig.js';
 import { Avatar } from '../characters/avatar.js';
 import { parseVRM, disposeVRM } from '../characters/loaders.js';
@@ -61,18 +62,12 @@ export function openCreator(app, res = null, preset = {}) {
 
       // --- voice
       d.voice ||= defaultVoice(d.gender);
-      const voices = sim.voice.voiceList();
-      const vbox = h('div', { class: 'card', style: { marginBottom: '10px' } });
-      vbox.append(
+      const vbox = h('div', { class: 'card', style: { marginBottom: '10px' } },
         h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Name pronunciation'), h('input', { type: 'text', value: d.sayName || '', placeholder: d.name, style: { flex: 1 }, oninput: (e) => { d.sayName = e.target.value; } })),
-        slider('Pitch', d.voice.pitch ?? 1, 0.1, 2, (v) => { d.voice.pitch = v; }),
-        slider('Speed', d.voice.rate ?? 1, 0.5, 2, (v) => { d.voice.rate = v; }),
-        slider('Babble tone', d.voice.babble ?? 1, 0.5, 2, (v) => { d.voice.babble = v; }),
-        voices.length ? h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Voice'), select([['', 'Default'], ...voices.map((v) => [v.name, `${v.name} (${v.lang})`])], d.voice.voiceName || '', (v) => { d.voice.voiceName = v; })) : h('div', { class: 'hint' }, 'No text-to-speech voices found on this system — babble voice will be used.'),
         h('div', { class: 'row' },
-          h('button', { class: 'small', onclick: () => sim.voice.speak(`Hi! I'm ${d.sayName || d.name}! ${d.catchphrase}`, d.voice, { mode: 'speech', force: true }) }, '🔊 Test speech'),
-          h('button', { class: 'small', onclick: () => { sim.audio.start(); sim.voice.speak(`Hi! I'm ${d.name}! ${d.catchphrase}`, d.voice, { mode: 'babble', force: true }); } }, '🔊 Test babble')),
-      );
+          h('button', { class: 'small primary', onclick: () => openVoiceEditor(app, d.voice, { name: d.sayName || d.name, catchphrase: d.catchphrase }) }, '🎙️ Voice editor…'),
+          h('button', { class: 'small', onclick: () => { sim.audio.start(); sim.voice.speak(`Hi! I'm ${d.sayName || d.name}! ${d.catchphrase}`, d.voice, { mode: 'speech', force: true }); } }, '🔊 Test')),
+        h('div', { class: 'hint' }, 'Pitch, speed, intonation, emotion, presets, verbal tics, babble tone…'));
       left.append(h('div', { class: 'field' }, h('label', {}, 'Voice'), vbox));
 
       // --- foods

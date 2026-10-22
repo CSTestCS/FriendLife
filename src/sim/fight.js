@@ -116,6 +116,7 @@ export class Fight {
       res.engaged = null;
       res.say(pick(['I\'m outta here!', 'Waaah!', 'Leave me alone!']), { emoji: '💨' });
       res.setExpression({ sad: 1, surprised: 0.4 });
+      if (res.inside) res.exit(); // run out of the building first
       const home = sim.island.houseOf(res.id);
       if (home) res.setPlan([{ kind: 'walk', x: home.door[0], z: home.door[1], run: true }, { kind: 'enter', loc: `home:${res.id}`, minutes: rand(60, 120) }]);
       this.events.push(`${res.name} ran away`);
@@ -284,7 +285,7 @@ export class Fight {
     const sim = this.sim;
     const fighters = this.fighters();
     for (const w of sim.residents) {
-      if (this.f.has(w) || w.inside || w.ko) continue;
+      if (this.f.has(w) || (w.inside || null) !== (this.instigator.inside || null) || w.ko) continue;
       const d = Math.hypot(w.x - this.center.x, w.z - this.center.z);
       if (d > 16) continue;
       if (w.engaged && w.engaged !== this.spectatorTag) continue;
@@ -429,7 +430,7 @@ export class FightManager {
 
   start(a, b, reason = '') {
     const sim = this.sim;
-    if (!a || !b || a.ko || b.ko || a.inside || b.inside) return null;
+    if (!a || !b || a.ko || b.ko || (a.inside || null) !== (b.inside || null)) return null;
     if ((sim.settings.conflict === 'off' || sim.settings.conflict === 'mild')) return null;
     if (this.active.some((f) => f.f.has(a) || f.f.has(b))) return null;
     sim.social.cancelFor(a);

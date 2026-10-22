@@ -8,6 +8,8 @@ import { Social, emotionExpr } from './social.js';
 import { FightManager } from './fight.js';
 import { Problems } from './problems.js';
 import { Dialogue } from './dialogue.js';
+import { thinkIndoors } from './roomBrain.js';
+import { updateJobs, onDuty, jobOf } from './jobs.js';
 import { INJURIES, line, NAMES, foodById, FOODS, ITEMS } from './data.js';
 import { Emitter, chance, clamp, damp, pick, rand } from '../core/util.js';
 
@@ -62,7 +64,9 @@ export class Sim extends Emitter {
 
   isNear(res) {
     const t = this.stage.controls.target;
-    return !res.inside && Math.hypot(res.x - t.x, res.z - t.z) < 26 && this.stage.camera.position.distanceTo(t) < 70;
+    if (res.inside) return !!res.room && res.room === this.viewRoom;
+    if (this.viewRoom) return false;
+    return Math.hypot(res.x - t.x, res.z - t.z) < 26 && this.stage.camera.position.distanceTo(t) < 70;
   }
 
   // ------------------------------------------------------------------ residents
@@ -146,8 +150,11 @@ export class Sim extends Emitter {
     this.social.cancelFor(res);
     const f = this.fights.fightOf(res);
     if (f) f.end(-1, 'player');
+    if (res.inside) res.exit();
     res.leaveSeat();
     res.disposeAttachments();
+    this.rooms?.remove(`home:${res.id}`);
+    if (this.viewRoom?.key === `home:${res.id}`) this.emit('viewRoom', null);
     res.disposeAvatars();
     this.residentGroup.remove(res.group);
     this.residents = this.residents.filter((r) => r !== res);
@@ -181,7 +188,9 @@ export class Sim extends Emitter {
   focusOn(res) {
     if (!res) return;
     this.followTarget = res;
-    if (res.inside) this.toast?.(`${res.name} is inside (${this.placeName(res.inside)}).`);
+    // residents who are indoors are shown in their room instance
+    if (res.inside && res.room) this.emit('viewRoom', res.inside);
+    else if (!res.inside && this.viewRoom) this.emit('viewRoom', null);
   }
 
   placeName(loc) {
@@ -209,7 +218,7 @@ export class Sim extends Emitter {
     res.lastVoice = now;
     const tts = mode === 'speech' && (this.settings.voiceScope === 'near' || this.selected === res);
     const vol = this.selected === res ? 1 : 0.55;
-    this.voice?.speak(text, res.d.voice || {}, { mode: tts ? 'speech' : 'babble', volume: vol });
+    this.voice?.speak(text, res.d.voice || {}, { mode: tts ? 'speech' : 'babble', volume: vol, mood: res.mood() });
   }
 
   alert(text, onClick, kind = 'info') { this.emit('alert', { text, onClick, kind }); }
@@ -226,11 +235,17 @@ export class Sim extends Emitter {
     return true;
   }
 
+  /** Current price (10% off while a shop clerk is on duty). */
+  price(item) {
+    return Math.ceil(item.price * (onDuty(this, 'clerk') ? 0.9 : 1));
+  }
+
   buy(id) {
     const item = foodById(id) || ITEMS.find((i) => i.id === id);
     if (!item) return false;
-    if (this.money < item.price) return false;
-    this.money -= item.price;
+    const price = this.price(item);
+    if (this.money < price) return false;
+    this.money -= price;
     this.inventory[id] = (this.inventory[id] || 0) + 1;
     this.audio.pop();
     this.emit('inventory');
@@ -268,7 +283,7 @@ export class Sim extends Emitter {
   }
 
   talkTo(res) {
-    if (res.inside) return `${res.name} is inside.`;
+    if (res.inside && res.room !== this.viewRoom) return `${res.name} is inside (${this.placeName(res.inside)}).`;
     if (res.engaged) return `${res.name} is busy right now.`;
     res.clearPlan();
     this.stage.camera.getWorldPosition(new THREE.Vector3());
@@ -309,9 +324,10 @@ export class Sim extends Emitter {
   }
 
   clinicTreat(res) {
+    const doc = onDuty(this, 'doctor') ? 0.5 : 1; // a doctor on duty heals much better
     for (const i of res.d.injuries) {
       i.treated = true;
-      i.remaining *= INJURIES[i.type]?.severity >= 3 ? 0.6 : INJURIES[i.type]?.severity >= 2 ? 0.4 : 0.2;
+      i.remaining *= (INJURIES[i.type]?.severity >= 3 ? 0.6 : INJURIES[i.type]?.severity >= 2 ? 0.4 : 0.2) * doc;
     }
     res.d.injuries = res.d.injuries.filter((i) => i.remaining > 30);
     res.refreshAttachments();
@@ -461,11 +477,12 @@ export class Sim extends Emitter {
     }
 
     for (const r of this.residents) {
-      if (!r.engaged && !r.ko && !r.inside) {
+      if (!r.engaged && !r.ko) {
         r.thinkTimer -= dt;
         if (r.thinkTimer <= 0) {
           r.thinkTimer = rand(0.3, 1.2);
-          think(r, this);
+          if (!r.inside) think(r, this);
+          else if (r.room) thinkIndoors(r, this, r.room);
         }
       }
     }
@@ -475,7 +492,7 @@ export class Sim extends Emitter {
     this.separate();
 
     // camera follows the selected resident
-    if (this.settings.follow && this.followTarget && !this.followTarget.inside && this.residents.includes(this.followTarget)) {
+    if (this.settings.follow && this.followTarget && (this.followTarget.inside ? this.followTarget.room === this.viewRoom : !this.viewRoom) && this.residents.includes(this.followTarget)) {
       const t = this.stage.controls.target;
       const fx = this.followTarget.x, fz = this.followTarget.z;
       const nx = damp(t.x, fx, 3, dtReal), nz = damp(t.z, fz, 3, dtReal);
@@ -560,6 +577,17 @@ export class Sim extends Emitter {
         }
       }
     }
+    // jobs: wages, promotions, perks
+    updateJobs(this, min);
+    const barista = this.residents.find((r) => r.working && r.d.job?.id === 'barista');
+    const doctorIn = onDuty(this, 'doctor');
+    for (const r of this.residents) {
+      if (r.inside === 'cafe' && barista && barista !== r) {
+        r.d.happiness = clamp(r.d.happiness + 0.06 * min, 0, 100);
+        if (chance(0.02 * min)) { r.changeRel(barista.id, 1); barista.changeRel(r.id, 1); }
+      }
+      if (r.inside === 'clinic' && doctorIn && r.d.job?.id !== 'doctor') for (const i of r.d.injuries) i.remaining -= min * 2;
+    }
     // melt snowmen
     if (this.snowmen.length && this.weather.snowCover < 0.1) {
       for (const id of this.snowmen) this.island.removeProp(id);
@@ -572,10 +600,10 @@ export class Sim extends Emitter {
     const rs = this.residents;
     for (let i = 0; i < rs.length; i++) {
       const a = rs[i];
-      if (a.inside || a.seat || a.ko) continue;
+      if (a.seat || a.ko || (a.inside && !a.room)) continue;
       for (let j = i + 1; j < rs.length; j++) {
         const b = rs[j];
-        if (b.inside || b.seat || b.ko) continue;
+        if (b.seat || b.ko || (a.inside || null) !== (b.inside || null)) continue;
         if (a.engaged && a.engaged === b.engaged) continue;
         const dx = b.x - a.x, dz = b.z - a.z;
         const d = Math.hypot(dx, dz);
@@ -604,6 +632,7 @@ export class Sim extends Emitter {
       props: this.island.serializeProps().filter((p) => !this.snowmen.includes(p.id)),
       anims: this.registry.serialize(),
       dialogue: this.dialogue.serialize(),
+      rooms: this.rooms?.serialize() || {},
       surfaces: this.surfaces || {},
     };
   }
@@ -618,6 +647,7 @@ export class Sim extends Emitter {
     this.weather.restore(data.weather);
     this.registry.restore(data.anims);
     this.dialogue.restore(data.dialogue);
+    this.rooms?.restore(data.rooms);
     for (const p of data.props || []) this.island.placeProp(p.type, p.x, p.z, p.rot, p.id);
     this.surfaces = data.surfaces || {};
     for (const rd of data.residents || []) {

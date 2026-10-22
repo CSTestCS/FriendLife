@@ -59,9 +59,19 @@ Conflicts come from personalities (temper, kindness, confidence…), relationshi
 
 Injuries: bruises, black eyes, split lips, broken noses, sprained ankles (residents limp), concussions (dizzy stars, bandage), broken arms (arm sling, can't fight). Running on wet ground can make residents slip; staying soaked too long can give them a cold. Injuries heal over time — faster with first aid or a trip to the clinic. Fights leave grudges, news headlines, and problems to resolve (make up, or… revenge).
 
+### Rooms (interiors)
+
+Every house — plus the café, shop and clinic — has its own **room instance**. When residents go inside they really are inside: sleeping in bed, lounging on the sofa, cooking, eating at the table, reading, changing at the wardrobe, browsing shop racks, waiting at the clinic, sitting at café tables, and working behind the counter. Friends **visit each other's houses** and chat (or argue — or brawl in the café) indoors.
+
+Look inside by **clicking a building**, the **🏠 Rooms** button (`H`), a resident's **👀 Look inside / 🏡 Their home** button, or just follow a selected resident — the camera goes in and out of buildings with them. **🎨 Decorate** any room: wall and floor colours or your own textures as wallpaper/flooring, furniture colour, and decorations (plants, lamps, piano, arcade machine, aquarium, giant teddy, guitar, trophy shelf). The window shows the weather outside, and lamps come on at night.
+
+### Jobs
+
+Give residents jobs from their panel (or when they ask for one): **Barista ☕, Shop Clerk 🛍️, Doctor 🩺, Gardener 🌷, Fisher 🎣, Performer 🎤, Lifeguard 🛟, Mail Carrier 📮**. Each has a shift, a weekly day off, a wage paid to the island, and promotions with new titles over time. Jobs suit some personalities better than others (★ rating) — residents in a job they dislike get unhappy and may ask to quit. Coworkers bond. On-duty perks: café visitors get happier, 10% off in the shop, much better clinic treatment, the performer entertains the plaza, the fisher brings fish to your inventory, the mail carrier delivers letters that bring residents closer, and more.
+
 ### Voices & words
 
-Residents talk with **text-to-speech** (your computer's voices — on Windows the built-in ones) using their own **pitch, speed and voice**, plus a name pronunciation — set in ✏️ Edit → Voice. Settings → Voices switches between *Speech* (for the selected resident or everyone nearby), cute *Babble*, or *Off*.
+Residents talk with **text-to-speech** (your computer's voices — on Windows the built-in ones). The **🎙️ Voice editor** (resident panel, or ✏️ Edit) sets each resident's voice, pitch, speed, volume, **intonation** (pitch movement through sentences; questions rise), **emotion** (mood shifts their voice — happy is brighter, sad slower and lower, angry faster), a **verbal tic** they add to lines ("…, nya!") and how often, **stutter**, and whether they always use speech, babble or stay silent. Babble has its own tone, waveform, vowel colour, speed, pitch range, vibrato and breathiness. Presets: Cute, Deep, Robot, Squeaky, Elderly, Whisper, Hyper, Dramatic, or 🎲 random. A name pronunciation is set in ✏️ Edit. Settings → Voices switches between *Speech* (for the selected resident or everyone nearby), cute *Babble*, or *Off*.
 
 Like Tomodachi Life, residents ask you to **teach them words** (📖 bubbles): something tasty, a place to visit, a hobby, a cute animal, a scary thing, a song, a silly sound, a nickname, a compliment, an insult, a dream… They use your words in conversations, jokes, compliments and arguments ("You smell like *space tacos*!"). Add a pronunciation so the voices say it right. Manage all words in **📖 Words**, or use **📖 Teach word** on any resident.
 

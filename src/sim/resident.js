@@ -9,7 +9,7 @@ import { DOLL_DEFAULTS } from '../characters/rig.js';
 import { makeUmbrella, makeHeadBandage, makePlaster, makeSling, makeDizzyStars } from '../world/props.js';
 import { INJURIES, FOODS, CATCHPHRASES, line, DOLL_PALETTES } from './data.js';
 import { angleDamp, clamp, pick, rand, uid, chance, damp } from '../core/util.js';
-import { defaultVoice } from '../engine/voice.js';
+import { defaultVoice, stylizeLine } from '../engine/voice.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -325,6 +325,11 @@ export class Resident {
     let spoken = null;
     if (text && typeof text === 'object') { spoken = text.say; text = text.text; }
     text = String(text ?? '');
+    // verbal tics / stutter from the voice settings (only for real lines, not reactions)
+    if (text.length > 3 && opts.style !== false) {
+      const styled = stylizeLine(text, this.d.voice);
+      if (styled !== text) { spoken = null; text = styled; }
+    }
     this.bubble = { text, emoji: opts.emoji || '', kind: opts.kind || 'speech', until: this.sim.realTime + (opts.dur || Math.min(5, 1.6 + text.length * 0.05)) };
     if (opts.talk !== false && this.avatar && text) {
       this.avatar.talking = true;
@@ -351,7 +356,7 @@ export class Resident {
 
   /** Move to x,z on the ground. snap=false lets the height ease (stepping onto platforms). */
   placeAt(x, z, snap = true) {
-    this.groundY = this.sim.island.heightAt(x, z);
+    this.groundY = this.space.heightAt(x, z);
     this.group.position.x = x;
     this.group.position.z = z;
     if (snap || Math.abs(this.group.position.y - this.groundY) > 1.2) this.group.position.y = this.groundY;
@@ -359,7 +364,7 @@ export class Resident {
 
   /** Keep residents out of buildings, trees, benches and other solid props. */
   pushOutOfObstacles(destX, destZ) {
-    const obs = this.sim.island.obstacles;
+    const obs = this.space.obstacles;
     let x = this.x, z = this.z;
     for (const o of obs) {
       const r = o.r + 0.18;
@@ -381,7 +386,7 @@ export class Resident {
   /** Walk (or run) to a point, avoiding buildings. Returns a promise-like flag object. */
   moveTo(x, z, opts = {}) {
     this.leaveSeat();
-    const path = planPath(this.x, this.z, x, z, this.sim.island.obstacles);
+    const path = this.space.isRoom ? gridPath(this.space, this.x, this.z, x, z) : planPath(this.x, this.z, x, z, this.space.obstacles);
     this.path = path;
     this.moving = { x, z, run: !!opts.run, stopDist: opts.stopDist ?? 0.15, onArrive: opts.onArrive || null, anim: opts.anim || null, speed: opts.speed || null, done: false };
     return this.moving;
@@ -413,19 +418,41 @@ export class Resident {
     }
   }
 
+  /** Where this resident is: the island, or the room instance they are inside. */
+  get space() {
+    return (this.inside && this.room) || this.sim.island;
+  }
+
   enter(locKey, minutes) {
     this.leaveSeat();
     this.stopMoving();
     this.inside = locKey;
     this.insideUntil = this.sim.clock + minutes;
-    this.group.visible = false;
     this.bubble = null;
+    this.room = this.sim.rooms?.get(locKey) || null;
+    if (this.room) {
+      // step into the room instance
+      this.sim.rooms.residentGroup.add(this.group);
+      const [x, z, rot] = this.room.entry;
+      this.placeAt(x, z);
+      this.heading = rot;
+      this.targetHeading = rot;
+      this.group.visible = true;
+      this.play('idle');
+    } else this.group.visible = false;
   }
 
   exit() {
     if (!this.inside) return;
+    this.leaveSeat();
+    this.stopMoving();
+    this.plan = [];
+    this.step = null;
+    this.working = false;
     const loc = this.sim.locationDoor(this.inside, this);
     this.inside = null;
+    this.room = null;
+    this.sim.residentGroup.add(this.group);
     this.group.visible = true;
     if (loc) {
       this.placeAt(loc[0], loc[1]);
@@ -459,8 +486,8 @@ export class Resident {
       }
     }
 
-    if (!this.inside) {
-      // run plan / brain
+    if (!this.inside || this.room) {
+      // run plan (the brain or the room brain fills it)
       if (!this.engaged && !this.ko) this._runPlan(dt);
       this._move(dt);
     }
@@ -473,8 +500,8 @@ export class Resident {
     if (this.avatar.talking && sim.realTime > (this.talkUntil || 0)) this.avatar.talking = false;
     if (this.bubble && sim.realTime > this.bubble.until) this.bubble = null;
 
-    // animation (skip the expensive part when hidden indoors)
-    if (!this.inside) {
+    // animation (skip the expensive part for rooms nobody is looking at)
+    if (!this.inside || (this.room && sim.viewRoom === this.room)) {
       // ease height when stepping onto/off platforms
       if (this.groundY === undefined) this.groundY = this.group.position.y;
       this.group.position.y = damp(this.group.position.y, this.groundY, 16, dt);
@@ -482,7 +509,7 @@ export class Resident {
       this._applyLookAt(pose, dt);
       this.avatar.applyPose(pose);
       const ik = !this.seat && !this.ko && !NO_IK.has(this.player.action) && sim.settings.ik !== false;
-      this.avatar.solveFootIK((x, z) => sim.island.heightAt(x, z), this.group.position.y, ik, dt);
+      this.avatar.solveFootIK((x, z) => this.space.heightAt(x, z), this.group.position.y, ik, dt);
       this.avatar.update(dt);
       this._updateAttachments(dt);
     }
@@ -544,8 +571,10 @@ export class Resident {
         this.placeAt(seat.x, seat.z);
         this.heading = seat.rot;
         this.targetHeading = seat.rot;
-        this.play(s.anim || (seat.ground ? 'sitGround' : 'sit'));
+        this.play(s.anim || seat.anim || (seat.ground ? 'sitGround' : 'sit'));
         if (s.expr) this.setExpression(s.expr);
+        if (s.say) this.say(s.say, { emoji: s.emoji });
+        else if (s.emoji) this.emote(s.emoji, 2.5);
         break;
       }
       case 'enter':
@@ -595,7 +624,7 @@ export class Resident {
     this.play(anim, { speed: anim === 'walk' || anim === 'walkHappy' ? speed / 1.3 : 1 });
     // slipping on a wet island while running
     this.slipCooldown -= dt;
-    if (m.run && this.sim.weather.wetness > 0.55 && this.slipCooldown <= 0 && !this.engaged) {
+    if (m.run && !this.inside && this.sim.weather.wetness > 0.55 && this.slipCooldown <= 0 && !this.engaged) {
       this.slipCooldown = 3;
       if (chance(0.025 * this.sim.weather.wetness * (this.sim.settings.conflict === 'off' ? 0.3 : 1))) this.sim.slip(this);
     }
@@ -657,6 +686,9 @@ export class Resident {
 
   _updateAttachments(dt) {
     const sim = this.sim;
+    // keep accessories in the same scene as the body (island or interior)
+    const fx = this.room ? sim.rooms.fx : sim.fx.group;
+    for (const obj of Object.values(this.attach)) if (obj.parent !== fx) fx.add(obj);
     const a = this.avatar;
     const vis = this.group.visible;
     // umbrella while it rains (not while fighting/KO)
@@ -768,4 +800,84 @@ export function planPath(ax, az, bx, bz, obstacles, depth = 0) {
   const wx = o.x + (nx / nl) * (r + 0.6);
   const wz = o.z + (nz / nl) * (r + 0.6);
   return [...planPath(ax, az, wx, wz, obstacles, depth + 1), ...planPath(wx, wz, bx, bz, obstacles, depth + 1)];
+}
+
+// --------------------------------------------------------------------------
+// Grid A* for room interiors (furniture makes long walls of obstacles that the
+// simple detour planner can't route around).
+
+export function gridPath(room, ax, az, bx, bz) {
+  const cell = 0.25;
+  const b = room.bounds;
+  const cols = Math.ceil((b.maxX - b.minX) / cell);
+  const rows = Math.ceil((b.maxZ - b.minZ) / cell);
+  const toCell = (x, z) => [clamp(Math.floor((x - b.minX) / cell), 0, cols - 1), clamp(Math.floor((z - b.minZ) / cell), 0, rows - 1)];
+  const center = (cx, cz) => [b.minX + (cx + 0.5) * cell, b.minZ + (cz + 0.5) * cell];
+  const blocked = new Uint8Array(cols * rows);
+  for (let cz = 0; cz < rows; cz++) {
+    for (let cx = 0; cx < cols; cx++) {
+      const [x, z] = center(cx, cz);
+      for (const o of room.obstacles) if (Math.hypot(x - o.x, z - o.z) < o.r + 0.22) { blocked[cz * cols + cx] = 1; break; }
+    }
+  }
+  const [sx, sz] = toCell(ax, az);
+  const [ex, ez] = toCell(bx, bz);
+  blocked[sz * cols + sx] = 0;
+  blocked[ez * cols + ex] = 0;
+  const free = (x, z, w) => w || !(x >= 0 && z >= 0 && x < cols && z < rows && blocked[z * cols + x] === 0) ? false : true;
+  // A*
+  const start = sz * cols + sx;
+  const goal = ez * cols + ex;
+  const g = new Float32Array(cols * rows).fill(Infinity);
+  const came = new Int32Array(cols * rows).fill(-1);
+  const open = [start];
+  const inOpen = new Uint8Array(cols * rows);
+  g[start] = 0;
+  inOpen[start] = 1;
+  const hfn = (i) => Math.hypot((i % cols) - ex, Math.floor(i / cols) - ez);
+  let found = false;
+  let guard = 0;
+  while (open.length && guard++ < 5000) {
+    let bi = 0;
+    for (let i = 1; i < open.length; i++) if (g[open[i]] + hfn(open[i]) < g[open[bi]] + hfn(open[bi])) bi = i;
+    const cur = open.splice(bi, 1)[0];
+    inOpen[cur] = 0;
+    if (cur === goal) { found = true; break; }
+    const cx = cur % cols, cz = Math.floor(cur / cols);
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dz) continue;
+        const nx = cx + dx, nz = cz + dz;
+        if (!free(nx, nz)) continue;
+        if (dx && dz && (!free(cx + dx, cz) || !free(cx, cz + dz))) continue; // no corner cutting
+        const ni = nz * cols + nx;
+        const ng = g[cur] + (dx && dz ? 1.414 : 1);
+        if (ng < g[ni]) {
+          g[ni] = ng;
+          came[ni] = cur;
+          if (!inOpen[ni]) { open.push(ni); inOpen[ni] = 1; }
+        }
+      }
+    }
+  }
+  if (!found) return [{ x: bx, z: bz }];
+  const cells = [];
+  for (let i = goal; i !== -1; i = came[i]) cells.unshift(i);
+  // string-pull: keep only the corners we can't see past
+  const pts = cells.map((i) => center(i % cols, Math.floor(i / cols)));
+  const clear = (p, q) => {
+    const steps = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (cell * 0.5));
+    for (let s = 1; s < steps; s++) {
+      const [cx, cz] = toCell(p[0] + ((q[0] - p[0]) * s) / steps, p[1] + ((q[1] - p[1]) * s) / steps);
+      if (blocked[cz * cols + cx]) return false;
+    }
+    return true;
+  };
+  const out = [];
+  let anchor = [ax, az];
+  for (let i = 1; i < pts.length; i++) {
+    if (!clear(anchor, pts[i])) { out.push({ x: pts[i - 1][0], z: pts[i - 1][1] }); anchor = pts[i - 1]; }
+  }
+  out.push({ x: bx, z: bz });
+  return out;
 }

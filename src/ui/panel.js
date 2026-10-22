@@ -4,6 +4,9 @@ import { personalityLabel, INJURIES, FOODS, foodById, itemById } from '../sim/da
 import { PROBLEM_DEFS } from '../sim/problems.js';
 import { formatClock } from '../core/util.js';
 import { closetSection } from './closet.js';
+import { jobSection, openJobPicker } from './rooms.js';
+import { openVoiceEditor } from './voiceEditor.js';
+import { assignJob } from '../sim/jobs.js';
 import { askWord } from './dictionary.js';
 import { TERM_CATEGORIES } from '../sim/dialogue.js';
 
@@ -76,9 +79,14 @@ export class Panel {
       A('🏥 Clinic', () => { sim.sendTo(r, 'clinic', 90, () => sim.clinicTreat(r)); toast(`${r.name} is heading to the clinic.`); }, { disabled: !r.d.injuries.length }),
       A('🏠 Go Home', () => { sim.sendTo(r, `home:${r.id}`, 120); }),
       A('📖 Teach word', () => this.teachWord()),
+      A('🎙️ Voice', () => openVoiceEditor(this.app, r.d.voice, { name: r.name, catchphrase: r.d.catchphrase })),
+      r.inside && r.room ? A('👀 Look inside', () => this.app.viewRoom(r.inside)) : A('🏡 Their home', () => this.app.viewRoom(`home:${r.id}`)),
       A('👕 Wardrobe', () => this.app.openWardrobe(r)),
       A('✏️ Edit', () => this.app.openCreator(r)),
     ));
+
+    // job
+    el.append(h('h3', {}, 'Job'), jobSection(this.app, r, () => this.render()));
 
     // closet (personal alternate outfits / models)
     el.append(h('h3', {}, 'Closet'), closetSection(this.app, r, () => this.render()));
@@ -159,6 +167,10 @@ export class Panel {
     };
     if (option.needs === 'food') return this.foodPicker((f) => finish({ food: f.id }), true);
     if (option.needs === 'wardrobe') { this.app.openWardrobe(r, () => finish({})); return; }
+    if (option.needs === 'job') {
+      openJobPicker(this.app, r, (id) => finish({ job: id }));
+      return;
+    }
     if (option.needs === 'text') {
       const cat = TERM_CATEGORIES[r.d.problem?.category];
       askWord(this.app, `${r.name} wants to learn a word`, `“${sim.problems.describe(r)?.text}”`).then((w) => { if (w) finish(w); });

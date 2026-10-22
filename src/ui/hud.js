@@ -5,6 +5,7 @@ import { formatClock } from '../core/util.js';
 import { WEATHER_TYPES } from '../engine/weather.js';
 import { personalityLabel } from '../sim/data.js';
 import { PROBLEM_DEFS } from '../sim/problems.js';
+import { jobTitle } from '../sim/jobs.js';
 
 const _v = new THREE.Vector3();
 
@@ -36,12 +37,13 @@ export class Hud {
     bar.append(
       this.clockEl, this.weatherEl, this.moneyEl, h('div', { class: 'sep' }),
       ...this.speedBtns, h('div', { class: 'sep' }),
-      h('button', { title: 'Shop', onclick: () => this.app.openShop() }, '🛍️ Shop'),
-      h('button', { title: 'Island news', onclick: () => this.app.openNews() }, '📰 News'),
-      h('button', { title: 'Island dictionary — words residents use', onclick: () => this.app.openDictionary() }, '📖 Words'),
-      h('button', { title: 'Import & manage VRM characters, outfits, textures, animations', onclick: () => this.app.openLibrary() }, '📦 Library'),
-      h('button', { title: 'Animation Studio', onclick: () => this.app.openStudio() }, '🎬 Studio'),
-      h('button', { title: 'Decorate the island (B)', onclick: () => this.app.toggleBuild() }, '🔨 Build'),
+      h('button', { title: 'Shop', onclick: () => this.app.openShop() }, '🛍️', h('span', { class: 'tb-label' }, ' Shop')),
+      h('button', { title: 'Island news', onclick: () => this.app.openNews() }, '📰', h('span', { class: 'tb-label' }, ' News')),
+      h('button', { title: 'Island dictionary — words residents use', onclick: () => this.app.openDictionary() }, '📖', h('span', { class: 'tb-label' }, ' Words')),
+      h('button', { title: 'Look inside houses, the café, shop and clinic (H)', onclick: () => this.app.openRooms() }, '🏠', h('span', { class: 'tb-label' }, ' Rooms')),
+      h('button', { title: 'Import & manage VRM characters, outfits, textures, animations', onclick: () => this.app.openLibrary() }, '📦', h('span', { class: 'tb-label' }, ' Library')),
+      h('button', { title: 'Animation Studio', onclick: () => this.app.openStudio() }, '🎬', h('span', { class: 'tb-label' }, ' Studio')),
+      h('button', { title: 'Decorate the island (B)', onclick: () => this.app.toggleBuild() }, '🔨', h('span', { class: 'tb-label' }, ' Build')),
       h('button', { title: 'Settings', onclick: () => this.app.openSettings() }, '⚙️'),
     );
   }
@@ -76,6 +78,7 @@ export class Hud {
     if (r.ko) return '💫 Knocked down';
     if (r.engaged?.isFight) return '🥊 Fighting!';
     if (r.engaged) return `💬 ${r.engaged.kind === 'argue' ? 'Arguing' : 'Chatting'}`;
+    if (r.working) return `💼 Working · ${jobTitle(r)}`;
     if (r.inside) return `🏠 ${this.sim.placeName(r.inside)}${r.sleeping ? ' (zzz)' : ''}`;
     if (r.d.injuries.length) return `🤕 ${personalityLabel(r.t)}`;
     return `Lv ${r.d.level} · ${personalityLabel(r.t)}`;
@@ -115,7 +118,8 @@ export class Hud {
         this.bubbleEls.set(r.id, el);
         el.addEventListener('click', (e) => { if (e.target.classList.contains('marker')) { sim.select(r); } });
       }
-      const show = !r.inside && r.group.visible;
+      // only residents in what we're looking at: the island, or the room we're inside
+      const show = (sim.viewRoom ? r.room === sim.viewRoom : !r.inside) && r.group.visible;
       if (!show) { el.style.display = 'none'; continue; }
       _v.set(r.x, r.group.position.y + (r.headHeight || 1.4) + 0.25, r.z).project(cam);
       if (_v.z > 1 || Math.abs(_v.x) > 1.1 || Math.abs(_v.y) > 1.1) { el.style.display = 'none'; continue; }

@@ -3,6 +3,7 @@
 
 import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, INJURIES } from './data.js';
+import { jobOf, isOnShift, planOutdoorWork } from './jobs.js';
 
 export function think(res, sim) {
   if (res.plan.length || res.step || res.engaged || res.inside || res.ko || res.moving) return;
@@ -41,6 +42,22 @@ export function think(res, sim) {
       { kind: 'enter', loc: 'clinic', minutes: rand(60, 120), onExit: () => sim.clinicTreat(res) },
     ]);
     return;
+  }
+
+  // --- work shift
+  const job = jobOf(res);
+  if (job && isOnShift(res, sim) && n.energy > 12 && n.hunger > 18) {
+    if (job.indoor) {
+      const loc = sim.locations[job.place];
+      const minutes = Math.max(20, job.end * 60 - sim.minuteOfDay);
+      res.setPlan([
+        { kind: 'call', fn: () => { if (chance(0.3)) res.say(`Off to work! ${job.icon}`, { emoji: '💼' }); } },
+        { kind: 'walk', x: loc.door[0], z: loc.door[1] },
+        { kind: 'enter', loc: job.place, minutes },
+      ]);
+      return;
+    }
+    if (planOutdoorWork(res, sim)) return;
   }
 
   // --- hungry: café
@@ -111,6 +128,8 @@ export function think(res, sim) {
     ['think', res.t.quirk + 0.3],
     ['snowman', w.snowCover > 0.35 && sim.snowmen.length < 4 ? 1.5 : 0],
     ['emote', sim.registry.emotes.size ? 1.5 : 0],
+    ['visit', 1.5 + res.t.sociability],
+    ['home', 0.5 + (1 - res.t.sociability) * 0.7],
   ];
   const what = weightedPick(choices);
   const happyExpr = { happy: 0.5 + res.t.energy * 0.3 };
@@ -193,6 +212,30 @@ export function think(res, sim) {
         { kind: 'call', fn: () => sim.buildSnowman(res, p.x + 0.8, p.z) },
       ]);
       return;
+    }
+    case 'visit': {
+      // drop by a friend's place if they're home
+      const friends = sim.residents.filter((o) => o !== res && o.inside === `home:${o.id}` && !o.sleeping && res.relScore(o.id) > 20);
+      if (friends.length) {
+        const f = friends[Math.floor(Math.random() * friends.length)];
+        const h = island.houseOf(f.id);
+        if (h) {
+          res.setPlan([
+            { kind: 'walk', x: h.door[0], z: h.door[1] },
+            { kind: 'call', fn: () => res.say(`Knock knock, ${f.name}!`, { emoji: '🚪' }) },
+            { kind: 'enter', loc: `home:${f.id}`, minutes: rand(40, 90), onExit: () => { res.changeRel(f.id, 4); f.changeRel(res.id, 4); } },
+          ]);
+          return;
+        }
+      }
+      break;
+    }
+    case 'home': {
+      if (home) {
+        res.setPlan([{ kind: 'walk', x: home.door[0], z: home.door[1] }, { kind: 'enter', loc: `home:${res.id}`, minutes: rand(40, 100) }]);
+        return;
+      }
+      break;
     }
     case 'emote': {
       const id = sim.registry.randomEmote();

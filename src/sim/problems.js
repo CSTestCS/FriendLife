@@ -4,8 +4,9 @@
 import { chance, clamp, rand } from '../core/util.js';
 import { foodById, INJURIES } from './data.js';
 import { TERM_CATEGORIES } from './dialogue.js';
+import { JOBS, jobOf, assignJob } from './jobs.js';
 
-const PRIORITY = { hurt: 5, sick: 5, heartbroken: 4, revenge: 4, makeUp: 3, sad: 3, confess: 3, soaked: 2, hungry: 2, wantFriend: 1, bored: 1, clothes: 1, teachWord: 1 };
+const PRIORITY = { hurt: 5, sick: 5, heartbroken: 4, revenge: 4, makeUp: 3, sad: 3, confess: 3, soaked: 2, hungry: 2, wantFriend: 1, bored: 1, clothes: 1, teachWord: 1, wantJob: 1, quitJob: 2 };
 
 export const PROBLEM_DEFS = {
   hungry: {
@@ -62,6 +63,16 @@ export const PROBLEM_DEFS = {
     icon: '🙋',
     text: (r, o) => `I'd like to be friends with ${o?.name}. Think they'd like me?`,
     options: [{ id: 'go', label: 'Go say hi!' }, { id: 'no', label: 'Not now' }],
+  },
+  wantJob: {
+    icon: '💼',
+    text: () => 'I\'m bored of doing nothing all day. Can you help me find a job?',
+    options: [{ id: 'pick', label: 'Choose a job…', needs: 'job' }, { id: 'later', label: 'Not right now' }],
+  },
+  quitJob: {
+    icon: '😩',
+    text: (r) => `I really don't like being a ${jobOf(r)?.label || 'worker'}... Can I quit?`,
+    options: [{ id: 'quit', label: 'Quit the job' }, { id: 'switch', label: 'Try another job…', needs: 'job' }, { id: 'stay', label: 'Hang in there!' }],
   },
   teachWord: {
     icon: '📖',
@@ -120,6 +131,7 @@ export class Problems {
       else if (r.d.wetness > 0.65 && chance(0.4)) this.offer(r, 'soaked');
       else if (n.fun < 25 && chance(0.3)) this.offer(r, 'bored');
       else if (chance(0.015)) this.offer(r, 'clothes');
+      else if (!jobOf(r) && sim.day > 1 && chance(0.012)) this.offer(r, 'wantJob');
       else if (chance(0.03)) {
         // ask about categories the dictionary has few words for
         const cats = Object.keys(TERM_CATEGORIES).filter((c) => c !== 'insult' || sim.settings.conflict !== 'off');
@@ -277,6 +289,27 @@ export class Problems {
         msg = `${res.name} learned “${term.text}” (${TERM_CATEGORIES[p.category].label}).`;
         break;
       }
+      case 'wantJob:pick':
+      case 'quitJob:switch':
+        if (!JOBS[payload.job]) return { error: 'Pick a job first.' };
+        assignJob(sim, res, payload.job);
+        res.say(`I'm a ${JOBS[payload.job].label} now! ${JOBS[payload.job].icon}`, { emoji: '💼' });
+        msg = `${res.name} is now a ${JOBS[payload.job].label}.`;
+        break;
+      case 'wantJob:later':
+        solved = false;
+        msg = 'Okay...';
+        break;
+      case 'quitJob:quit':
+        assignJob(sim, res, 'none');
+        res.d.happiness = clamp(res.d.happiness + 10, 0, 100);
+        msg = `${res.name} quit and feels free!`;
+        break;
+      case 'quitJob:stay':
+        res.d.happiness = clamp(res.d.happiness - 4, 0, 100);
+        res.say('*sigh* Okay, I\'ll try my best.', { emoji: '😓' });
+        msg = `${res.name} will keep at it.`;
+        break;
       case 'teachWord:later':
         msg = 'Maybe next time!';
         solved = false;

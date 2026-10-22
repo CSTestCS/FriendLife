@@ -194,3 +194,12 @@ body.using-pad, body.using-pad * { cursor: none !important; }
 #osk .osk-key.wide { flex: 2; font-size: 13px; }
 #osk .osk-key.sel { background: var(--accent); color: #fff; box-shadow: 0 2px 0 #d9693f; transform: scale(1.06); }
 #osk .osk-hint { font-size: 11px; color: var(--ink-soft); text-align: center; }
+
+/* room view bar */
+#roomBar { position: fixed; top: 62px; left: 50%; transform: translateX(-50%); z-index: 19; background: var(--panel); border-radius: 999px; box-shadow: var(--shadow);
+  padding: 6px 8px 6px 16px; display: flex; gap: 8px; align-items: center; white-space: nowrap; max-width: 92vw; overflow: hidden; }
+#roomBar .hint { overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
+
+/* compact top bar on narrower windows: icons only */
+@media (max-width: 1560px) { #topbar .tb-label { display: none; } #topbar button { padding: 6px 9px; } }
+@media (max-width: 1000px) { #topbar .clock { min-width: 0; font-size: 15px; } }

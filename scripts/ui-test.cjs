@@ -32,7 +32,7 @@ const server = http.createServer((req, res) => {
     await s.registry.loadAsset(an.id);
     window.__friendlife.setSpeed(1);
   });
-  const shot = (n) => page.screenshot({ path: `${OUT}/ui-${n}.png` });
+  const shot = (n) => { console.log('step', n, new Date().toISOString().slice(11, 19)); return page.screenshot({ path: `${OUT}/ui-${n}.png` }); };
   const clickText = async (sel, text) => { const el = page.locator(sel, { hasText: text }).first(); await el.click(); await page.waitForTimeout(600); };
   const closeModal = async () => { await page.keyboard.press('Escape'); await page.waitForTimeout(300); };
   // select resident via list

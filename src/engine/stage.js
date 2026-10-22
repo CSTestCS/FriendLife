@@ -242,7 +242,7 @@ export class Stage {
       this.shake = damp(this.shake, 0, 10, dt);
     }
     this.sky.position.copy(this.camera.position);
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.overrideScene || this.scene, this.camera);
     this.camera.position.sub(off);
   }
 }

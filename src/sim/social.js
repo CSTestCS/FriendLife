@@ -48,7 +48,7 @@ export class Interaction {
     const { a, b, sim } = this;
     this.t += dt;
     if (this.phase === 'approach') {
-      if (!sim.residents.includes(b) || b.inside || b.ko || !sim.residents.includes(a)) return this.finish(true);
+      if (!sim.residents.includes(b) || (b.inside || null) !== (a.inside || null) || b.ko || !sim.residents.includes(a)) return this.finish(true);
       if (this.kind !== 'prank') b.faceTo(a.x, a.z);
       if (this.t > 30) return this.finish(true);
       if (!a.moving) {
@@ -406,7 +406,11 @@ export class Social {
 
   start(a, b, kind, opts = {}) {
     if (!a || !b || a === b) return null;
-    if (a.engaged || b.engaged || a.inside || b.inside || a.ko || b.ko) return null;
+    if (a.engaged || b.engaged || a.ko || b.ko) return null;
+    // indoors only between people in the same room instance
+    if (a.inside || b.inside) {
+      if (!opts.indoor || a.inside !== b.inside || !a.room) return null;
+    }
     const it = new Interaction(this.sim, a, b, kind, opts);
     this.stats[kind] = (this.stats[kind] || 0) + 1;
     this.active.push(it);

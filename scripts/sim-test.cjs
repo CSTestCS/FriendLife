@@ -29,6 +29,9 @@ const server = http.createServer((req, res) => {
     const s = a.sim;
     a.started = false; // stop the render loop from also updating the sim
     s.settings.conflict = conflict;
+    const jobIds = ['barista', 'doctor', 'clerk', 'performer', 'fisher', 'mail'];
+    s.residents.forEach((r, i) => { if (jobIds[i]) { r.d.problem = null; s.problems.offer(r, 'wantJob', {}); s.problems.solve(r, 'pick', { job: jobIds[i] }); } });
+    const insideLog = {};
     s.speed = 8;
     const t0 = performance.now();
     const target = s.clock + days * 1440;
@@ -39,12 +42,13 @@ const server = http.createServer((req, res) => {
       s.update(0.05);
       s.weather.update(0.4, 0.4, s.minuteOfDay);
       maxFrame = Math.max(maxFrame, performance.now() - f0);
+      if (frames % 200 === 0) for (const r of s.residents) if (r.inside) { const k = r.inside.startsWith('home:') ? 'home' : r.inside; insideLog[k] = (insideLog[k] || 0) + 1; }
       frames++;
       if (frames % 400 === 0) await new Promise((r) => setTimeout(r, 0)); // let timers fire
     }
     const ms = performance.now() - t0;
     return {
-      stats: s.social.stats, frames, msPerFrame: +(ms / frames).toFixed(3), maxFrame: +maxFrame.toFixed(1), day: s.day, fights: s.fights.total, money: s.money,
+      stats: s.social.stats, insideLog, jobs: s.residents.map((r) => `${r.name}:${r.d.job?.id}:lv${r.d.job?.level}:${Math.round(r.d.job?.earned || 0)}`), inv: s.inventory, frames, msPerFrame: +(ms / frames).toFixed(3), maxFrame: +maxFrame.toFixed(1), day: s.day, fights: s.fights.total, money: s.money,
       weather: s.weather.history,
       news: s.newsLog.map((n) => `D${n.day} ${String(Math.floor(n.time / 60)).padStart(2, '0')}:${String(Math.floor(n.time % 60)).padStart(2, '0')} ${n.icon} ${n.text}`).reverse(),
       residents: s.residents.map((r) => ({ name: r.name, hap: Math.round(r.d.happiness), lvl: r.d.level, inj: r.d.injuries.map((i) => i.type).join(','), prob: r.d.problem?.type, wet: +r.d.wetness.toFixed(2), rel: Object.entries(r.d.relationships).map(([id, x]) => `${s.byId(id)?.name}:${Math.round(x.score)}${x.partner ? '♥' : x.crush ? '♡' : ''}${x.grudge > 20 ? `g${Math.round(x.grudge)}` : ''}`).join(' ') })),
@@ -53,6 +57,8 @@ const server = http.createServer((req, res) => {
   console.log(`frames=${out.frames} ms/frame=${out.msPerFrame} max=${out.maxFrame} day=${out.day} fights=${out.fights} money=${out.money}`);
   console.log('weather:', out.weather.join(' → '));
   console.log('interactions:', JSON.stringify(out.stats));
+  console.log('inside samples:', JSON.stringify(out.insideLog));
+  console.log('jobs:', out.jobs.join(' '), 'inventory:', JSON.stringify(out.inv));
   console.log(out.news.join('\n'));
   for (const r of out.residents) console.log(JSON.stringify(r));
   console.log('ERRORS:', errors.length);

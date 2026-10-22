@@ -41,6 +41,7 @@ export const ACTIONS = [
   { id: 'shop', label: 'Shop', group: 'Menus', keys: ['KeyM'], pad: [] },
   { id: 'words', label: 'Dictionary', group: 'Menus', keys: ['KeyK'], pad: [] },
   { id: 'studio', label: 'Animation Studio', group: 'Menus', keys: ['KeyU'], pad: [] },
+  { id: 'rooms', label: 'Rooms (look inside buildings)', group: 'Menus', keys: ['KeyH'], pad: [] },
   { id: 'rotateBuild', label: 'Rotate decoration (build mode)', group: 'Menus', keys: ['KeyR'], pad: [] },
 ];
 

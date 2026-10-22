@@ -9,6 +9,8 @@ import { InputBindings, orbitCamera, panCamera, zoomCamera } from './ui/input.js
 import { GamepadController } from './ui/gamepad.js';
 import { OnScreenKeyboard, isTextInput } from './ui/osk.js';
 import { openControls } from './ui/controls.js';
+import { RoomManager } from './world/rooms.js';
+import { RoomBar, openRoomList } from './ui/rooms.js';
 import { Effects } from './engine/fx.js';
 import { TextureStore } from './engine/textures.js';
 import { Island } from './world/island.js';
@@ -37,13 +39,16 @@ class App {
     this.island = new Island(this.stage.scene);
     this.weather = new Weather(this.stage, this.audio);
     this.effects = new Effects(this.stage.scene);
+    this.rooms = new RoomManager(this.stage.renderer, this.textures);
     this.sim = new Sim({
-      stage: this.stage, island: this.island, weather: this.weather, audio: this.audio, voice: this.voice,
+      stage: this.stage, island: this.island, weather: this.weather, audio: this.audio, voice: this.voice, rooms: this.rooms,
       library: this.library, registry: this.registry, textures: this.textures, effects: this.effects,
     });
     this.hud = new Hud(this);
     this.panel = new Panel(this);
     this.build = new BuildMode(this);
+    this.roomBar = new RoomBar(this);
+    this.sim.on('viewRoom', (key) => (key ? this.viewRoom(key) : this.leaveRoom()));
     this.input = new InputBindings();
     this.osk = new OnScreenKeyboard();
     this.pad = new GamepadController(this);
@@ -146,6 +151,76 @@ class App {
   openNews() { openNews(this); }
   openDictionary() { openDictionary(this); }
   openControls() { openControls(this); }
+  openRooms() { openRoomList(this); }
+
+  // ------------------------------------------------------------------ room instances
+  /** Look inside a room instance (house / café / shop / clinic). */
+  viewRoom(key) {
+    const room = this.rooms.get(key);
+    if (!room) return;
+    const st = this.stage;
+    const c = st.controls;
+    if (!this.outsideCam) {
+      this.outsideCam = { pos: st.camera.position.clone(), target: c.target.clone(), min: c.minDistance, max: c.maxDistance, polar: c.maxPolarAngle };
+    }
+    if (this.build.active) this.build.toggle(false);
+    this.sim.viewRoom = room;
+    st.overrideScene = this.rooms.scene;
+    this.rooms.focus(room);
+    c.target.copy(room.center);
+    st.camera.position.set(room.ox + 1.2, 4.3, 8.6);
+    c.minDistance = 2.5;
+    c.maxDistance = 13;
+    c.maxPolarAngle = Math.PI * 0.46;
+    c.minAzimuthAngle = -1.15;
+    c.maxAzimuthAngle = 1.15;
+    c.update();
+    this.roomBar.show(room);
+    const sel = this.sim.selected;
+    this.sim.followTarget = sel && sel.room === room ? sel : null;
+    $('#helpHint').classList.add('hidden');
+  }
+
+  leaveRoom() {
+    if (!this.sim.viewRoom) return;
+    const st = this.stage;
+    const c = st.controls;
+    this.sim.viewRoom = null;
+    st.overrideScene = null;
+    c.minAzimuthAngle = -Infinity;
+    c.maxAzimuthAngle = Infinity;
+    if (this.outsideCam) {
+      st.camera.position.copy(this.outsideCam.pos);
+      c.target.copy(this.outsideCam.target);
+      c.minDistance = this.outsideCam.min;
+      c.maxDistance = this.outsideCam.max;
+      c.maxPolarAngle = this.outsideCam.polar;
+      this.outsideCam = null;
+    }
+    c.update();
+    this.roomBar.show(null);
+    const sel = this.sim.selected;
+    // keep following someone outside; stop following someone still indoors (otherwise we'd jump straight back in)
+    this.sim.followTarget = sel && !sel.inside ? sel : null;
+    this.lastFollowed = null;
+    $('#helpHint').classList.remove('hidden');
+  }
+
+  /** Which building (if any) is under the cursor → its room key. */
+  pickBuilding() {
+    const cands = [];
+    for (const hs of this.island.houses) if (hs.obj && hs.owner) cands.push([hs.obj, `home:${hs.owner}`]);
+    for (const k of ['cafe', 'shop', 'clinic']) if (this.island.locations[k]?.building) cands.push([this.island.locations[k].building, k]);
+    const hits = this.raycaster.intersectObjects(cands.map((x) => x[0]), true);
+    if (!hits.length) return null;
+    let o = hits[0].object;
+    while (o) {
+      const f = cands.find((x) => x[0] === o);
+      if (f) return f[1];
+      o = o.parent;
+    }
+    return null;
+  }
   openSettings(focus) { openSettings(this, focus); }
   toggleBuild() { this.build.toggle(); }
 
@@ -245,12 +320,17 @@ class App {
     }
     if (btn !== select) return;
     const res = this.pickResident();
-    if (res) this.sim.select(res);
-    else if (this.sim.selected) this.sim.followTarget = null;
+    if (res) { this.sim.select(res); return; }
+    if (!this.sim.viewRoom) {
+      const key = this.pickBuilding();
+      if (key) { this.viewRoom(key); toast(`Looking inside: ${this.rooms.get(key).label(this.sim)}`); return; }
+    }
+    if (this.sim.selected) this.sim.followTarget = null;
   }
 
   pointerAt(clientX, clientY) {
     if (!this.started) return;
+    if (this.sim.viewRoom && this.build.active) this.build.toggle(false);
     this.setMouse({ clientX, clientY });
     if (this.build.active) this.build.pointerMove(this.pickGround());
     else {
@@ -267,6 +347,7 @@ class App {
       if (this.osk.open) return this.osk.hide();
       if (closeTopModal()) return;
       if (this.build.active) return this.build.toggle(false);
+      if (sim?.viewRoom) return this.leaveRoom();
       sim?.select(null);
       return;
     }
@@ -301,6 +382,7 @@ class App {
       case 'shop': this.openShop(); break;
       case 'words': this.openDictionary(); break;
       case 'studio': this.openStudio(); break;
+      case 'rooms': this.openRooms(); break;
       case 'rotateBuild': if (this.build.active) this.build.rot += Math.PI / 4; break;
       default: break;
     }
@@ -339,7 +421,8 @@ class App {
   }
 
   pickResident() {
-    const hits = this.raycaster.intersectObjects(this.sim.residents.filter((r) => !r.inside).map((r) => r.hit), false);
+    const view = this.sim.viewRoom;
+    const hits = this.raycaster.intersectObjects(this.sim.residents.filter((r) => (view ? r.room === view : !r.inside)).map((r) => r.hit), false);
     if (!hits.length) return null;
     return this.sim.byId(hits[0].object.userData.residentId);
   }
@@ -379,6 +462,16 @@ class App {
     if (this.started) {
       this.hud.update(dt);
       this.panel.update(dt);
+      this.roomBar.update(dt);
+      this.rooms.update({ sky: this.stage.skyUniforms.uHorizon.value, rain: this.weather.p.rain, night: this.stage.light.night, cloud: this.weather.p.cloud });
+      // the camera follows the selected resident in and out of buildings
+      const ft = sim.followTarget || (sim.selected && this.lastFollowed === sim.selected ? sim.selected : null);
+      if (ft) {
+        if (ft.room && sim.viewRoom !== ft.room) { this.viewRoom(ft.inside); sim.followTarget = ft; }
+        else if (!ft.inside && sim.viewRoom && this.lastFollowedRoom) this.leaveRoom();
+        this.lastFollowed = ft;
+        this.lastFollowedRoom = ft.room || null;
+      } else this.lastFollowed = null;
     }
     this.stage.render(dt);
   }

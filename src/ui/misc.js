@@ -14,7 +14,8 @@ export function openShop(app) {
     body: (b) => {
       const render = () => {
         b.innerHTML = '';
-        b.append(h('div', { class: 'row', style: { marginBottom: '8px' } }, h('span', { class: 'tag' }, `🪙 ${Math.floor(sim.money)} coins`), h('span', { class: 'hint' }, 'Earn coins by solving residents\' problems and when they level up.')));
+        b.append(h('div', { class: 'row', style: { marginBottom: '8px' } }, h('span', { class: 'tag' }, `🪙 ${Math.floor(sim.money)} coins`), h('span', { class: 'hint' }, 'Earn coins by solving residents\' problems, when they level up, and from their jobs.'),
+          sim.residents.some((r) => r.working && r.d.job?.id === 'clerk') ? h('span', { class: 'tag good' }, '🛍️ Clerk on duty: 10% off!') : null));
         const section = (title, list) => {
           b.append(h('h3', {}, title));
           const grid = h('div', { class: 'grid3', style: { gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' } });
@@ -22,7 +23,7 @@ export function openShop(app) {
             grid.append(h('div', { class: 'shop-item', title: it.desc || '' }, h('div', { class: 'ic' }, it.icon), h('b', {}, it.name),
               it.desc ? h('div', { class: 'hint' }, it.desc) : null,
               h('div', { class: 'hint' }, `Owned: ${sim.inventory[it.id] || 0}`),
-              h('button', { class: 'primary small', disabled: sim.money < it.price, onclick: () => { if (sim.buy(it.id)) render(); } }, `Buy · ${it.price} 🪙`)));
+              h('button', { class: 'primary small', disabled: sim.money < sim.price(it), onclick: () => { if (sim.buy(it.id)) render(); } }, `Buy · ${sim.price(it)} 🪙`)));
           }
           b.append(grid);
         };
