@@ -47,7 +47,7 @@ export class Fight {
   }
 
   join(res, side) {
-    res.clearPlan();
+    res.suspendPlan();
     res.leaveSeat();
     if (res.engaged && res.engaged !== this) res.engaged.finish?.(true);
     res.engaged = this;
@@ -311,7 +311,7 @@ export class Fight {
       if (w.t.kindness > 0.65 && w.t.confidence > 0.45 && !this.peacekeeper && this.t > 4 && chance(0.12)) {
         this.peacekeeper = w;
         this.spectators.delete(w);
-        w.clearPlan();
+        w.suspendPlan();
         w.engaged = null;
         w.say(line('stopFight'), { emoji: '✋' });
         w.setPlan([{ kind: 'walk', x: this.center.x + 0.6, z: this.center.z + 0.6, run: true }, { kind: 'call', fn: () => { if (!this.done && chance(0.65)) this.end(-1, 'brokenUp', w); } }, { kind: 'anim', anim: 'argue', dur: 2, expr: { angry: 0.4 } }]);
@@ -320,7 +320,7 @@ export class Fight {
       // just watch
       if (!this.spectators.has(w) && !w.engaged) {
         this.spectators.add(w);
-        w.clearPlan();
+        w.suspendPlan();
         const friendOf = fighters.find((r) => w.relScore(r.id) > 40);
         const ang = Math.atan2(w.x - this.center.x, w.z - this.center.z);
         const rr = rand(3.2, 4.5);
@@ -406,7 +406,7 @@ export class Fight {
       if (chance(st.ko ? 0.45 : st.down || losers.includes(res) ? 0.3 : 0.15)) setTimeout(() => { if (sim.residents.includes(res)) causeMishap(sim, res, chance(0.8) ? 'torn' : 'seam'); }, 2500);
     }
     // spectators go back to life
-    for (const w of this.spectators) if (!w.engaged) { w.clearPlan(); w.play('idle'); w.setExpression({}); }
+    for (const w of this.spectators) if (!w.engaged) { w.clearPlan(); w.play('idle'); w.setExpression({}); w.resumePlan(); }
     // headline
     const names = (arr) => arr.map((r) => r.name).join(' & ');
     let text;

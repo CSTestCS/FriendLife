@@ -19,6 +19,8 @@ function swimWeight(res, sim) {
 
 export function think(res, sim) {
   if (res.plan.length || res.step || res.engaged || res.inside || res.ko || res.moving) return;
+  // pick up what they were doing before being interrupted
+  if (res.suspended && res.resumePlan()) return;
   // on the way to the wardrobe but got side-tracked: carry on home
   if (res.errand?.kind === 'dress') {
     const door = sim.locationDoor(res.homeKey, res);

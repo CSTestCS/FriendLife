@@ -237,6 +237,23 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
 
   await ev(() => { window.__friendlife.sim.speed = 1; });
 
+  // ---------------------------------------------------------------- a chat doesn't make them forget what they were doing
+  const goal = await ev(async () => {
+    const s = window.__friendlife.sim;
+    s.settings.conflict = 'off';
+    const [r, o] = s.residents.filter((x) => !x.inside && !x.engaged).slice(0, 2);
+    for (const x of [r, o]) { s.social.cancelFor(x); x.clearPlan(); x.thinkTimer = 9999; x.d.job = null; x.working = false; x.d.waterFear = 0; x.suspended = null; }
+    r.activity = 'swim';
+    s.swim.planSwim(r);
+    const planned = r.plan.length;
+    o.placeAt(r.x + 1, r.z);
+    const it = s.social.start(o, r, 'chat');
+    const held = { suspended: !!r.suspended, plan: r.plan.length };
+    it.finish(false);
+    return { planned, held, after: { plan: r.plan.length, activity: r.activity, firstStep: r.plan[0]?.kind } };
+  });
+  check('interrupted activity resumes after a chat', goal.held.suspended && goal.held.plan === 0 && goal.after.plan >= goal.planned - 1 && goal.after.activity === 'swim', JSON.stringify(goal));
+
   // ---------------------------------------------------------------- progression
   const pg = await ev(() => {
     const s = window.__friendlife.sim;
@@ -269,15 +286,18 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     s.problems.solve(cop, 'pick', { job: 'police' });
     cop.d.job.dayOff = (s.day + 3) % 7;
     cop.working = true;
-    // someone tries to chat with the officer on duty: no
-    const chat = s.social.start(a, cop, 'chat');
+    // the officer on duty never starts a chat; others may come up for a friendly word, not to pick a fight
+    const copStarts = s.social.start(cop, a, 'chat');
+    const argue = s.social.start(a, cop, 'argue');
+    const chatWith = s.social.start(a, cop, 'chat');
+    if (chatWith) chatWith.finish(true);
     a.placeAt(cop.x + 4, cop.z); b.placeAt(cop.x + 4.8, cop.z);
     s.settings.conflict = 'spicy';
     const f = s.fights.start(a, b, 'argument');
     window.__fight = f; window.__cop = cop;
-    return { chatBlocked: !chat, fight: !!f, job: cop.d.job?.id };
+    return { copStartsBlocked: !copStarts, argueBlocked: !argue, chatAllowed: !!chatWith, fight: !!f, job: cop.d.job?.id };
   });
-  check('residents on the clock can\'t be pulled into chats', jb.chatBlocked, JSON.stringify(jb));
+  check('on the clock: never start chats, can be talked to (friendly only)', jb.copStartsBlocked && jb.argueBlocked && jb.chatAllowed, JSON.stringify(jb));
   let broken = false;
   for (let i = 0; i < 60 && jb.fight && !broken; i++) {
     await wait(1000);

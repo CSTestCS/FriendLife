@@ -587,6 +587,39 @@ export class Resident {
     this.stopMoving();
   }
 
+  /**
+   * Something interrupts what they're doing (a chat, watching a fight, the
+   * player talking to them…): set the current activity aside so it can be
+   * picked up again afterwards instead of being forgotten.
+   */
+  suspendPlan() {
+    if (!this.suspended) {
+      const steps = [];
+      if (this.step && this.step.kind !== 'call') steps.push(this.step);
+      steps.push(...this.plan);
+      if (steps.length) this.suspended = { steps, activity: this.activity, at: this.sim.clock, inside: this.inside || null };
+    }
+    this.clearPlan();
+  }
+
+  /** Back to what they were doing before the interruption. Returns true if resumed. */
+  resumePlan() {
+    const s = this.suspended;
+    if (!s) return false;
+    this.suspended = null;
+    if (this.sim.clock - s.at > 180 || (this.inside || null) !== s.inside || this.ko) return false;
+    if (s.activity && !this.activity) this.activity = s.activity;
+    const steps = [];
+    for (const st of s.steps) {
+      const copy = { ...st, t: 0 };
+      // walk back to a seat they had to leave
+      if (copy.kind === 'sit' && copy.seat && !steps.length && Math.hypot(this.x - copy.seat.x, this.z - copy.seat.z) > 0.4) steps.push({ kind: 'walk', x: copy.seat.x, z: copy.seat.z });
+      steps.push(copy);
+    }
+    this.setPlan(steps);
+    return true;
+  }
+
   // ------------------------------------------------------------------ per frame
   update(dt, gameMin) {
     const sim = this.sim;

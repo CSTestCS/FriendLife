@@ -95,6 +95,7 @@ export function thinkIndoors(res, sim, room) {
   const hour = sim.minuteOfDay / 60;
   const others = sim.residents.filter((o) => o !== res && o.inside === res.inside && !o.engaged && !o.ko);
   const rooms = sim.rooms;
+  if (res.suspended && res.resumePlan()) return;
 
   // walking through nested rooms (condo lobby → hallway → apartment / pool)
   if (res.route) {

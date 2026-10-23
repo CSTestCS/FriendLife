@@ -33,7 +33,7 @@ export class Interaction {
   begin() {
     const { a, b } = this;
     for (const r of [a, b]) {
-      r.clearPlan();
+      r.suspendPlan(); // whatever they were up to waits until after the chat
       r.leaveSeat();
       r.engaged = this;
     }
@@ -115,6 +115,8 @@ export class Interaction {
       if (this.onEnd) this.onEnd();
       if (this.next) this.next();
     }
+    // back to what they were doing (swimming, work, errands…)
+    for (const r of [a, b]) if (!r.engaged && !r.ko && !r.plan.length && !r.changeAfterChat) r.resumePlan();
     // told their underwear shows by accident: go put something else on (work comes first)
     for (const r of [a, b]) {
       if (!r.changeAfterChat) continue;
@@ -421,8 +423,13 @@ export class Social {
   start(a, b, kind, opts = {}) {
     if (!a || !b || a === b) return null;
     if (a.engaged || b.engaged || a.ko || b.ko) return null;
-    // people on the clock keep working (the player can still set things up)
-    if (!opts.force && [a, b].some((x) => jobOf(x) && isOnShift(x, this.sim))) return null;
+    // people on the clock don't start conversations themselves; someone off the clock
+    // may come up to them for a friendly word (the player can still set anything up)
+    if (!opts.force) {
+      const busy = (x) => jobOf(x) && isOnShift(x, this.sim);
+      if (busy(a)) return null;
+      if (busy(b) && !FRIENDLY_KINDS.has(kind)) return null;
+    }
     // indoors only between people in the same room instance
     if (a.inside || b.inside) {
       if (!opts.indoor || a.inside !== b.inside || !a.room) return null;

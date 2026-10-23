@@ -385,7 +385,7 @@ export class Sim extends Emitter {
     const n = res.d.needs;
     n.hunger = clamp(n.hunger + 45, 0, 100);
     let msg;
-    res.clearPlan();
+    res.suspendPlan();
     if (food.id === res.d.favFood) {
       res.d.happiness = clamp(res.d.happiness + 25, 0, 100);
       this.gainXp(res, 30);
@@ -414,7 +414,7 @@ export class Sim extends Emitter {
   talkTo(res) {
     if (res.inside && res.room !== this.viewRoom) return `${res.name} is inside (${this.placeName(res.inside)}).`;
     if (res.engaged) return `${res.name} is busy right now.`;
-    res.clearPlan();
+    res.suspendPlan();
     this.stage.camera.getWorldPosition(new THREE.Vector3());
     const cam = this.stage.camera.position;
     const m = res.mood();
