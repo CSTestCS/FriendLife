@@ -254,6 +254,32 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
   });
   check('interrupted activity resumes after a chat', goal.held.suspended && goal.held.plan === 0 && goal.after.plan >= goal.planned - 1 && goal.after.activity === 'swim', JSON.stringify(goal));
 
+  // ---------------------------------------------------------------- leaving home in underwear (player setting)
+  const lv = await ev(() => {
+    const s = window.__friendlife.sim;
+    const r = s.residents.find((x) => !x.engaged && s.homeOf(x));
+    s.social.cancelFor(r); r.engaged = null; r.ko = false; r.clearPlan();
+    const saved = { outfits: r.d.outfits, wearing: r.d.wearing, mishap: r.d.mishap, activity: r.activity };
+    r.d.outfits = [{ name: 'Underwear', tags: ['home'], perception: { self: [], others: [] } }];
+    r.d.mishap = null; r.activity = null; r.sleeping = false; r.morningPending = false; r.errand = null;
+    const tryLeave = (rate) => {
+      s.settings.underwearRate = rate;
+      if (r.inside !== r.homeKey) r.enter(r.homeKey, 30);
+      r.d.wearing = 0; r.errand = null; r.turnedBackAt = null; r.leaveCheckAt = null;
+      r.insideUntil = s.clock;
+      r.update(0.016, 0);
+      return { stillHome: r.inside === r.homeKey, errand: r.errand?.kind || null };
+    };
+    const never = tryLeave(0);
+    const always = tryLeave(1);
+    Object.assign(r.d, { outfits: saved.outfits, wearing: saved.wearing, mishap: saved.mishap });
+    r.activity = saved.activity; r.errand = null;
+    s.settings.underwearRate = 0.05;
+    return { never, always, dflt: window.__friendlife.sim.settings.underwearRate };
+  });
+  check('rate 0%: turns back at the door to get dressed', lv.never.stillHome && lv.never.errand === 'dress', JSON.stringify(lv));
+  check('rate 100%: heads out in underwear', !lv.always.errand, JSON.stringify(lv));
+
   // ---------------------------------------------------------------- progression
   const pg = await ev(() => {
     const s = window.__friendlife.sim;

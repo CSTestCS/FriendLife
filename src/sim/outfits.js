@@ -527,3 +527,25 @@ export function underwearChatBeats(sim, it) {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Heading out the door
+
+/**
+ * About to leave home with their underwear showing and no reason for it
+ * (not off to swim in it, not dressed for the activity they're heading to)?
+ */
+export function underdressedToLeave(res) {
+  if (!underwearShowing(res)) return false;
+  if (res.d.mishap?.owned) return false;
+  const tags = outfitMeta(res, res.d.wearing ?? -1)?.tags || [];
+  const act = res.activity && res.activity !== 'sleep' ? res.activity : null;
+  if (act && tags.includes(ACT_TAG[act])) return false;
+  return true;
+}
+
+/** Chance (0–1) that someone leaves home underdressed anyway (player setting). */
+export function underwearLeaveRate(sim) {
+  const v = sim.settings?.underwearRate;
+  return clamp(v == null ? 0.05 : v, 0, 1);
+}

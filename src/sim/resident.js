@@ -10,7 +10,7 @@ import { makeUmbrella, makeHeadBandage, makePlaster, makeSling, makeDizzyStars }
 import { INJURIES, FOODS, CATCHPHRASES, line, DOLL_PALETTES } from './data.js';
 import { angleDamp, clamp, pick, rand, uid, chance, damp } from '../core/util.js';
 import { defaultVoice, normVoice, stylizeLine } from '../engine/voice.js';
-import { mishapLook } from './outfits.js';
+import { mishapLook, underdressedToLeave, underwearLeaveRate } from './outfits.js';
 import { priorLabel } from './relations.js';
 
 const _v = new THREE.Vector3();
@@ -620,6 +620,35 @@ export class Resident {
     return true;
   }
 
+  /**
+   * At the front door: still in underwear (or half-dressed) for no reason?
+   * Most catch it and get dressed first; how often someone doesn't is the
+   * player's "Leave home in underwear" setting. Returns true if they turned back.
+   */
+  _checkDressedToLeave() {
+    const sim = this.sim;
+    if (!this.d.outfits?.length && !this.d.mishap) return false;
+    if (this.leaveCheckAt === this.insideUntil) return false; // already decided for this departure
+    this.leaveCheckAt = this.insideUntil;
+    if (!underdressedToLeave(this)) return false;
+    if (this.d.mishap?.forgot) return false; // the morning slip already rolled the dice
+    if (sim.clock - (this.turnedBackAt ?? -1e9) < 60) return false; // tried once; nothing better to wear
+    this.turnedBackAt = sim.clock;
+    if (chance(underwearLeaveRate(sim))) return false; // didn't notice…
+    if (!this.room) {
+      // home not loaded as a room: just get dressed
+      sim.dressAtWardrobe(this, { ctx: { outside: true, activity: this.activity }, avoidEmbarrassing: true });
+      return false;
+    }
+    if (chance(0.5)) this.say(pick(['Wait, I can\'t go out like this!', 'Oops, almost forgot to get dressed!', 'Clothes! I need clothes!']), { emoji: '👕', sound: false });
+    this.clearPlan();
+    this.errand = { kind: 'dress', index: null, activity: this.activity, after: this.onExit, leave: true, avoidEmbarrassing: true };
+    this.onExit = null;
+    this.insideUntil = sim.clock + 20;
+    this.leaveCheckAt = null;
+    return true;
+  }
+
   // ------------------------------------------------------------------ per frame
   update(dt, gameMin) {
     const sim = this.sim;
@@ -633,6 +662,8 @@ export class Resident {
           if (this.sleeping && !(this.wakeAt <= sim.clock)) this.wakeAt = sim.clock;
           if (this.activity === 'sleep' && !this.sleeping) this.morningPending = true;
           this.insideUntil = sim.clock + 20;
+        } else if (this.inside === this.homeKey && this._checkDressedToLeave()) {
+          // went back to the wardrobe first
         } else if (this.room && sim.rooms?.parentOf(this.inside)) {
           this.leaving = true;
           this.insideUntil = Infinity;

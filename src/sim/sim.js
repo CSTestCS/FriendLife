@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS = {
   voice: 'speech', // speech | babble | off
   voiceScope: 'selected', // selected | near  (who uses text-to-speech; others babble)
   autoOutfits: true,
+  underwearRate: 0.05, // chance a resident leaves home in underwear without noticing
   quality: 'high',
 };
 

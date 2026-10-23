@@ -1,7 +1,7 @@
 // What residents do while inside a room instance.
 import { chance, clamp, rand, weightedPick } from '../core/util.js';
 import { isOnShift, JOBS } from './jobs.js';
-import { causeMishap } from './outfits.js';
+import { causeMishap, underwearLeaveRate } from './outfits.js';
 import { pick } from '../core/util.js';
 
 /**
@@ -62,11 +62,12 @@ function routines(res, sim, room) {
       steps.push({ kind: 'anim', anim: groggy ? 'yawn' : 'stretch', dur: 3, say: pick(groggy ? ['*yaaawn*... five more minutes...', 'Mmh... morning already?'] : ['Good morning! ☀️', 'Rise and shine!', 'A brand new day!']), emoji: groggy ? '🥱' : '☀️' });
     }
     // only now and then does someone forget to change out of their sleepwear
-    const forgets = wake && chance(0.012 + (groggy ? 0.02 : 0) + (res.t.quirk > 0.7 ? 0.012 : 0));
+    // how often is the player's "Leave home in underwear" setting
+    const forgets = wake && chance(underwearLeaveRate(sim) * 0.5 * (1 + (groggy ? 1 : 0) + (res.t.quirk > 0.7 ? 0.6 : 0)));
     steps.push(...use('closet', 3, { anim: 'dress', emoji: forgets ? '' : '👕', then: () => {
       res.morningPending = false;
       if (res.activity === 'sleep') res.activity = null;
-      if (forgets) { causeMishap(sim, res, 'pajamas'); return; }
+      if (forgets) { if (causeMishap(sim, res, 'pajamas')) res.d.mishap.forgot = true; return; }
       sim.dressAtWardrobe(res, { ctx: { outside: true, activity: null } });
       if (chance(0.01)) causeMishap(sim, res, 'inside');
     } }));

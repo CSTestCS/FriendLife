@@ -105,6 +105,13 @@ export function openSettings(app, focus) {
           h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Speech for'), ...[['selected', 'Selected resident'], ['near', 'Everyone nearby']].map(([k, label]) => h('button', { class: `small ${st.voiceScope === k ? 'active' : ''}`, onclick: () => { st.voiceScope = k; render(); } }, label))),
           h('div', { class: 'hint' }, 'Speech uses each resident\'s voice (built-in synthesizer or a system voice — edit in 🎙️ Voice). Residents not chosen here babble.'),
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.autoOutfits !== false, onchange: (e) => { st.autoOutfits = e.target.checked; } }), ' Residents change outfits by weather/time'),
+          (() => {
+            const pct = (v) => `${Math.round((v ?? 0.05) * 100)}%`;
+            const out = h('span', { class: 'lbl' }, pct(st.underwearRate));
+            return h('div', { class: 'row' }, h('span', { class: 'lbl' }, '🩲 Leave home in underwear'),
+              h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: st.underwearRate ?? 0.05, oninput: (e) => { st.underwearRate = +e.target.value; out.textContent = pct(st.underwearRate); } }), out);
+          })(),
+          h('div', { class: 'hint' }, 'How often a resident heads out without noticing they\'re still in underwear / half-dressed (also how often someone forgets to get dressed in the morning). 0% = never.'),
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.ik !== false, onchange: (e) => { st.ik = e.target.checked; } }), ' Foot IK & head tracking'),
         );
         right.append(h('h3', {}, 'Audio & view'));

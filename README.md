@@ -92,6 +92,7 @@ There's always a small chance of a **wardrobe mishap**: clothes **torn in a figh
 
 - An outfit **named "Underwear"** can be changed into anywhere — everything else still needs the wardrobe at home.
 - Wearing "Underwear", any outfit with **"Incomplete"** in its name, or having a mishap means **underwear shows**. Out in public (anywhere but their own home) and not swimming, others notice ("Uh, I can see your underwear!"). A man seeing a woman in her underwear — or a woman seeing a man — gets flustered and attracted (and may develop a crush); relatives don't.
+- **Heading out the door** still in underwear (e.g. their "home" outfit) with no reason for it, residents usually notice and go back to the wardrobe first. How often they *don't* notice — and how often someone forgets to get dressed in the morning — is set with **⚙️ Settings → 🩲 Leave home in underwear** (default 5%, 0% = never).
 - Anyone seen in an outfit they feel **embarrassed** in (or with underwear showing, unless they're proud of the look) covers up and goes home to put on something else. Swimming is the exception.
 
 ### Prior relations
