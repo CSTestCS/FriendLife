@@ -454,3 +454,76 @@ export function fixMishap(sim, res, quiet = false) {
   if (!quiet) res.say('Phew, all fixed!', { emoji: '✨' });
   sim.emit('resident', res);
 }
+
+// ---------------------------------------------------------------------------
+// Telling someone their underwear shows (during a chat)
+
+const ACT_TAG = { swim: 'swim', sleep: 'sleep', exercise: 'exercise', dance: 'party', work: 'work', date: 'date' };
+
+/**
+ * Why is their underwear showing on purpose? Returns a reason ('swim', 'sleep',
+ * 'home', 'work', 'own'…) or null if it's accidental.
+ */
+export function underwearIntent(sim, res) {
+  const m = res.d.mishap;
+  if (m) return m.owned ? 'own' : null;
+  const tags = outfitMeta(res, res.d.wearing ?? -1)?.tags || [];
+  if (res.inWater || res.activity === 'swim') return tags.includes('swim') || res.inWater ? 'swim' : null;
+  const act = res.activity || (res.working ? 'work' : null);
+  if (act && tags.includes(ACT_TAG[act])) return act;
+  if (res.inside && res.inside === res.homeKey && (tags.includes('home') || tags.includes('sleep'))) return 'home';
+  if (res.sleeping || res.morningPending) return 'sleep';
+  return null;
+}
+
+const ACK = {
+  swim: ['Yep! I\'m going swimming.', 'It\'s swimwear, silly!', 'Perfect for a dip!'],
+  sleep: ['I\'m about to go to bed!', 'It\'s what I sleep in~', 'Bedtime soon!'],
+  home: ['I\'m just relaxing at home~', 'My house, my rules!', 'Comfy at home!'],
+  exercise: ['It\'s my workout gear!', 'Easier to move in!', 'Workout time!'],
+  dance: ['It\'s for dancing!', 'Gotta move freely!'],
+  party: ['It\'s for dancing!', 'Gotta move freely!'],
+  work: ['It\'s my work uniform, actually.', 'All part of the job!'],
+  date: ['It\'s for my date~', 'I\'m dressed for a date!'],
+  own: ['I know. I\'m owning it. 😎', 'It\'s a look!'],
+};
+
+/**
+ * Extra opening beats for a chat when someone's underwear shows: the other
+ * one tells them; they either explain (it's on purpose) or get flustered and
+ * go change after the chat. Returns [] if nothing to say.
+ */
+export function underwearChatBeats(sim, it) {
+  const out = [];
+  for (const [tellerKey, wearerKey] of [['a', 'b'], ['b', 'a']]) {
+    const teller = it[tellerKey];
+    const wearer = it[wearerKey];
+    if (!underwearShowing(wearer) || sim.clock - (wearer.toldUndiesAt ?? -1e9) < 45) continue;
+    wearer.toldUndiesAt = sim.clock;
+    const attracted = sim.settings.romance && !isRelative(teller, wearer) && ((teller.d.gender === 'm' && wearer.d.gender === 'f') || (teller.d.gender === 'f' && wearer.d.gender === 'm'));
+    const intent = underwearIntent(sim, wearer);
+    const tell = attracted
+      ? pick(['Um... I-I can see your underwear... 😳', 'So, uh... your underwear is showing. Not complaining!', 'I can see your underwear. Just so you know. *blush*'])
+      : pick(['Hey, just so you know... I can see your underwear.', 'Psst! Your underwear is showing.', 'Um, are you aware your underwear is on show?']);
+    const beat = { dur: 3 };
+    beat[tellerKey] = { anim: 'talk', say: tell, expr: attracted ? { blush: 1, happy: 0.4 } : { surprised: 0.4 }, emoji: attracted ? '😳' : '👀' };
+    beat[wearerKey] = { anim: 'listen', expr: { surprised: 0.5 } };
+    const reply = { dur: 3 };
+    if (intent) {
+      reply[wearerKey] = { anim: 'wave', say: pick(ACK[intent] || ['I know! It\'s on purpose.']), expr: { happy: 0.6 }, emoji: '😄' };
+      reply[tellerKey] = { anim: 'idle', expr: { happy: 0.4 } };
+    } else {
+      reply[wearerKey] = { anim: 'shy', say: pick(['W-what?! Oh no!', 'Eek! Thanks for telling me!', 'Oh my gosh, I didn\'t notice!']), expr: { blush: 1, surprised: 0.6 }, emoji: '😳' };
+      reply[tellerKey] = { anim: 'idle', expr: { relaxed: 0.4 } };
+      reply.fn = () => {
+        wearer.changeAfterChat = true;
+        if (wearer.d.mishap) wearer.d.mishap.noticed = true;
+        wearer.setEmotion('shy', 40);
+        wearer.changeRel(teller.id, 2);
+      };
+    }
+    if (attracted) beat.fn = () => { teller.changeRel(wearer.id, 3); teller.setEmotion('love', 20); };
+    out.push(beat, reply);
+  }
+  return out;
+}

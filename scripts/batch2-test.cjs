@@ -182,6 +182,61 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
   check('wardrobe has Thin + Mishap toggles', /Thin/.test(wardrobe) && /Mishap/.test(wardrobe));
   await page.keyboard.press('Escape');
 
+  // ---------------------------------------------------------------- thin on a cut-out (alpha-tested) body material
+  const cut = await ev(async () => {
+    const s = window.__friendlife.sim;
+    const r = s.residents[6] || s.residents[2];
+    const a = r.avatar;
+    const m = a.materials.find((x) => x.isMToonMaterial && !/Outline/.test(x.name));
+    m.alphaTest = 0.5; // VRoid body materials use a 0.5 cut-off
+    const key = [...a._slots.values()].find((sl) => sl.mats.includes(m))?.key;
+    r.d.custom = { textures: {}, tints: {}, hidden: [], thin: [key] };
+    await r.applyLook();
+    a.setWetness(0.99); a.setWetness(1);
+    const wet = { op: m.opacity, cut: m.alphaTest, visible: m.visible };
+    a.setWetness(0);
+    return { wet, dry: { op: m.opacity, cut: m.alphaTest } };
+  });
+  check('thin body part fades instead of vanishing (cut-off scaled)', cut.wet.op > 0.2 && cut.wet.op < 0.6 && cut.wet.cut < cut.wet.op && cut.wet.visible && cut.dry.op === 1 && cut.dry.cut === 0.5, JSON.stringify(cut));
+
+  // ---------------------------------------------------------------- telling someone their underwear shows (in a chat)
+  const tellRun = async (intentional) => ev(async (intentional) => {
+    const s = window.__friendlife.sim;
+    s.settings.conflict = 'off';
+    const [w, t] = s.residents.filter((r) => !r.inside).slice(0, 2);
+    for (const x of [w, t]) { s.social.cancelFor(x); x.engaged = null; x.ko = false; x.errand = null; x.clearPlan(); x.thinkTimer = 9999; x.d.job = null; x.working = false; }
+    const cur = JSON.parse(JSON.stringify(w.appearance()));
+    w.d.outfits = [{ name: 'Underwear', look: cur.look || w.d.look, outfit: null, custom: { textures: {}, tints: {}, hidden: [] }, tags: intentional ? ['exercise'] : [] }, { name: 'Clothes', look: cur.look || w.d.look, outfit: null, custom: { textures: {}, tints: {}, hidden: [] }, tags: ['default'] }];
+    await s.changeOutfit(w, 0, { quiet: true });
+    w.activity = intentional ? 'exercise' : null;
+    w.toldUndiesAt = -1e9;
+    w.d.autoOutfits = false;
+    t.placeAt(w.x + 1, w.z);
+    window.__said = [];
+    const orig = w.say.bind(w);
+    w.say = (txt, o) => { window.__said.push(typeof txt === 'object' ? txt.text : txt); return orig(txt, o); };
+    const it = s.social.start(t, w, 'chat');
+    s.speed = 4;
+    window.__w = w;
+    return !!it;
+  }, intentional);
+  const told = async () => {
+    for (let i = 0; i < 150; i++) {
+      await wait(1000);
+      const st = await ev(() => ({ said: window.__said, engaged: !!window.__w.engaged, errand: window.__w.errand?.kind || null, inside: window.__w.inside }));
+      if (!st.engaged && st.said.length) { await wait(1500); return ev(() => ({ said: window.__said, errand: window.__w.errand?.kind || null, inside: window.__w.inside, wearing: window.__w.d.wearing })); }
+    }
+    return null;
+  };
+  await tellRun(true);
+  const t1 = await told();
+  check('told about underwear while it\'s on purpose → just acknowledges', t1 && t1.said.some((x) => /workout|move in/i.test(x)) && !t1.errand, JSON.stringify(t1));
+  await tellRun(false);
+  const t2 = await told();
+  check('told about underwear by accident → flustered, goes to change', t2 && t2.said.some((x) => /oh no|didn't notice|thanks for telling/i.test(x)) && (t2.errand === 'dress' || t2.wearing !== 0), JSON.stringify(t2));
+
+  await ev(() => { window.__friendlife.sim.speed = 1; });
+
   // ---------------------------------------------------------------- progression
   const pg = await ev(() => {
     const s = window.__friendlife.sim;

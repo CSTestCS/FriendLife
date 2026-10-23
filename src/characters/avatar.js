@@ -408,17 +408,21 @@ export class Avatar {
       const op = thin ? 1 - 0.62 * clamp((this.wetness - 0.15) / 0.75) : 1;
       if (op < 0.985) {
         if (!m.userData.thinWas) {
-          m.userData.thinWas = { transparent: m.transparent, depthWrite: m.depthWrite, opacity: m.opacity };
+          m.userData.thinWas = { transparent: m.transparent, depthWrite: m.depthWrite, opacity: m.opacity, alphaTest: m.alphaTest || 0 };
           m.transparent = true;
-          m.depthWrite = false;
           m.needsUpdate = true;
         }
-        m.opacity = op * m.userData.thinWas.opacity;
+        const w = m.userData.thinWas;
+        m.opacity = op * w.opacity;
+        // VRoid body/cloth materials use an alpha cut-off (often 0.5): scale it with the
+        // opacity, otherwise the faded part drops below the cut-off and vanishes entirely
+        if (w.alphaTest > 0) m.alphaTest = w.alphaTest * op * 0.9;
       } else if (m.userData.thinWas) {
         const w = m.userData.thinWas;
         m.transparent = w.transparent;
         m.depthWrite = w.depthWrite;
         m.opacity = w.opacity;
+        m.alphaTest = w.alphaTest;
         m.userData.thinWas = null;
         m.needsUpdate = true;
       }

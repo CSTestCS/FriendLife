@@ -3,13 +3,14 @@
 // jealousy, the cold shoulder, dance-offs, breakups). Heated conflicts
 // can escalate into fist fights (fight.js).
 
-import { outfitSocialBias } from './outfits.js';
+import { outfitSocialBias, underwearChatBeats } from './outfits.js';
 import { priorSocialBias, isRelative } from './relations.js';
 import { jobOf, isOnShift, onDuty } from './jobs.js';
 import { residentPerks } from './progress.js';
 import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, TOPICS } from './data.js';
 
+const FRIENDLY_KINDS = new Set(['chat', 'joke', 'compliment', 'gossip', 'hug', 'date', 'confess', 'apology', 'danceOff']);
 const CONFLICT_MUL = { off: 0, mild: 0.6, normal: 1, spicy: 1.8 };
 
 export class Interaction {
@@ -60,6 +61,8 @@ export class Interaction {
         a.faceTo(b.x, b.z);
         b.faceTo(a.x, a.z);
         this.beats = buildScript(this);
+        // friendly talks start with "um, I can see your underwear" when it shows
+        if (FRIENDLY_KINDS.has(this.kind)) this.beats = [...underwearChatBeats(sim, this), ...this.beats];
         this.beatIndex = -1;
         this.nextBeat();
       }
@@ -111,6 +114,13 @@ export class Interaction {
       b.cooldowns.social = now + rand(10, 30);
       if (this.onEnd) this.onEnd();
       if (this.next) this.next();
+    }
+    // told their underwear shows by accident: go put something else on (work comes first)
+    for (const r of [a, b]) {
+      if (!r.changeAfterChat) continue;
+      r.changeAfterChat = false;
+      if (r.working) { r.say('I\'ll fix it after my shift...', { emoji: '😣' }); continue; }
+      setTimeout(() => { if (sim.residents.includes(r) && !r.engaged) sim.goChange(r, { avoidEmbarrassing: true, say: false }); }, 800);
     }
   }
 }
