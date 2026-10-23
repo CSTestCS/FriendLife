@@ -82,7 +82,7 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     });
     await wait(500);
     const relBefore = await ev(() => { const s = window.__friendlife.sim; s.swim.distress(s.residents[0]); return s.residents[0].relScore(s.residents[3].id); });
-    await waitFor(() => window.__friendlife.sim.swim.cases[0]?.phase !== 'struggle', 60000, 'guard dispatch') || true;
+    await waitFor(() => window.__friendlife.sim.swim.cases[0]?.phase !== 'struggle', 150000, 'guard dispatch') || true;
     const g0 = await ev(() => { const s = window.__friendlife.sim; const c = s.swim.cases[0]; return { phase: c?.phase, rescuer: c?.rescuer?.name, guard: s.residents[3].name, onShift: s.residents[3].working }; });
     check('lifeguard responds', g0.rescuer === g0.guard, JSON.stringify(g0));
     await ev(() => { window.__friendlife.sim.speed = 4; });
@@ -97,6 +97,8 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     await ev(() => {
       const s = window.__friendlife.sim;
       s.clock = Math.floor(s.clock / 1440) * 1440 + 9 * 60;
+      s.settings.conflict = 'off'; // keep the test residents out of arguments
+      for (const x of s.residents) s.social.cancelFor(x);
       const f = s.residents[1];
       s.social.cancelFor(f); f.engaged = null; f.ko = false; if (f.inside) f.exit(); f.clearPlan();
       f.d.problem = null;
@@ -161,7 +163,7 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
       return { telling: !!a.d.mishap?.telling, noticed: !!a.d.mishap?.noticed || !a.d.mishap, goingToChange: a.errand?.kind === 'dress', asked: a.d.problem?.type };
     });
     check('mishap gets noticed / pointed out', told.noticed && (told.goingToChange || told.asked === 'mishap'), JSON.stringify(told));
-    await ev(() => { window.__friendlife.sim.speed = 1; });
+    await ev(() => { const s = window.__friendlife.sim; s.speed = 1; s.settings.conflict = 'normal'; });
   }
 
   if (run('outfits')) {

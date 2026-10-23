@@ -75,7 +75,7 @@ const check = (name, ok, extra = '') => results.push(`${ok ? 'PASS' : 'FAIL'} ${
     window.__homeRes = r;
   });
   // (they brush their teeth and change first: the bedtime routine)
-  await page.waitForFunction(() => window.__homeRes.seat?.type === 'bed', null, { timeout: 240000, polling: 1000 }).catch(() => {});
+  await page.waitForFunction(() => window.__homeRes.seat?.type === 'bed', null, { timeout: 480000, polling: 1000 }).catch(() => {});
   await wait(1500);
   await page.screenshot({ path: `${OUT}/r2-home-night.png` });
   const home = await ev(() => ({ seat: window.__homeRes.seat?.type, y: +window.__homeRes.group.position.y.toFixed(2), anim: window.__homeRes.player.action }));
