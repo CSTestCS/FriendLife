@@ -72,6 +72,7 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
       s.problems.offer(g, 'wantJob', {});
       s.problems.solve(g, 'pick', { job: 'lifeguard' });
       g.d.job.dayOff = (s.day + 3) % 7;
+      for (const x of [v, g]) { s.social.cancelFor(x); x.engaged = null; x.errand = null; x.sleeping = false; x.morningPending = false; if (x.inside) x.exit(); }
       g.working = true;
       const post = s.island.lifeguardPost;
       g.placeAt(post.x, post.z);
