@@ -1,6 +1,7 @@
 // HUD: top bar, resident list, speech bubbles, alerts, picking.
+import { ISLAND_LEVELS, islandTitle } from '../sim/progress.js';
 import * as THREE from 'three';
-import { $, h, esc, toast } from './dom.js';
+import { $, h, esc, toast, openModal } from './dom.js';
 import { formatClock } from '../core/util.js';
 import { WEATHER_TYPES } from '../engine/weather.js';
 import { personalityLabel } from '../sim/data.js';
@@ -32,10 +33,11 @@ export class Hud {
     this.clockEl = h('div', { class: 'clock' });
     this.weatherEl = h('div', { class: 'chip', title: 'Weather (click for settings)', style: { cursor: 'pointer' }, onclick: () => this.app.openSettings('weather') });
     this.moneyEl = h('div', { class: 'chip', title: 'Coins' });
+    this.levelEl = h('div', { class: 'chip', title: 'Island level (click for progress & unlocks)', style: { cursor: 'pointer' }, onclick: () => openProgress(this.app) });
     const speeds = [0, 1, 2, 4, 8];
     this.speedBtns = speeds.map((s) => h('button', { class: 'small', title: s === 0 ? 'Pause (Space)' : `${s}x speed`, onclick: () => this.app.setSpeed(s) }, s === 0 ? '⏸' : `${s}x`));
     bar.append(
-      this.clockEl, this.weatherEl, this.moneyEl, h('div', { class: 'sep' }),
+      this.clockEl, this.weatherEl, this.moneyEl, this.levelEl, h('div', { class: 'sep' }),
       ...this.speedBtns, h('div', { class: 'sep' }),
       h('button', { title: 'Shop', onclick: () => this.app.openShop() }, '🛍️', h('span', { class: 'tb-label' }, ' Shop')),
       h('button', { title: 'Island news', onclick: () => this.app.openNews() }, '📰', h('span', { class: 'tb-label' }, ' News')),
@@ -56,6 +58,8 @@ export class Hud {
     this.weatherEl.textContent = `${w.icon} ${w.label}${sim.weather.wetness > 0.3 ? ' · 💧wet' : ''}`;
     this.weatherEl.title = sim.weather.locked ? 'Weather locked (Settings)' : `Forecast: ${next?.icon} ${next?.label} later`;
     this.moneyEl.textContent = `🪙 ${Math.floor(sim.money)}`;
+    const pr = sim.progress;
+    this.levelEl.innerHTML = `🏝️ Lv ${pr.level} <span class="lvbar"><i style="width:${Math.round(pr.pct * 100)}%"></i></span>`;
     this.speedBtns.forEach((b, i) => b.classList.toggle('active', [0, 1, 2, 4, 8][i] === sim.speed));
   }
 
@@ -155,4 +159,26 @@ export class Hud {
     this.listTimer -= dt;
     if (this.listTimer <= 0) { this.listTimer = 0.7; this.refreshListStatus(); }
   }
+}
+
+/** Island level, progress and what each level unlocks. */
+export function openProgress(app) {
+  const sim = app.sim;
+  const pr = sim.progress;
+  openModal({
+    title: `🏝️ ${islandTitle(pr.level)} — level ${pr.level}`,
+    body: (b) => {
+      b.append(
+        h('div', { class: 'meta' }, `Island XP: ${Math.floor(pr.xp)} / ${pr.next} to level ${pr.level + 1}`),
+        h('div', { class: 'lvbar', style: { width: '100%', height: '10px', margin: '6px 0 12px' } }, h('i', { style: { width: `${Math.round(pr.pct * 100)}%` } })),
+        h('div', { class: 'hint' }, 'Earn island XP by solving residents\' problems, feeding favourites and giving gifts, stopping fights, rescues, residents levelling up and getting promoted, new residents moving in, and every new day. Each level also pays a coin bonus.'),
+        h('h3', {}, 'Unlocks'),
+      );
+      for (const l of ISLAND_LEVELS) {
+        const got = l.level <= pr.level;
+        b.append(h('div', { class: 'row', style: { opacity: got ? 1 : 0.6 } }, h('span', { class: `tag ${got ? 'good' : ''}` }, got ? '✓' : `Lv ${l.level}`), h('span', {}, l.text)));
+      }
+      b.append(h('h3', {}, 'Resident levels'), h('div', { class: 'hint' }, 'Residents level up from happiness, your help, classes and work. Each level: higher wages, faster promotions, safer swimming, tougher in fights, more charming, happier. Level 5: they throw house parties. Level 8: island celebrity with fans.'));
+    },
+  });
 }

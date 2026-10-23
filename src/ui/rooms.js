@@ -145,11 +145,12 @@ export function openJobPicker(app, res, onPick) {
         const j = JOBS[id];
         const fit = id === 'none' ? null : jobFit(j, res.t);
         const coworkers = sim.residents.filter((r) => r !== res && r.d.job?.id === id).map((r) => r.name);
-        const locked = j.needs === 'condo' && !sim.condo.active;
+        const needLv = sim.progress.levelFor('jobs', id);
+        const locked = (j.needs === 'condo' && !sim.condo.active) || needLv > sim.progress.level;
         grid.append(h('div', { class: 'card' },
           h('div', { class: 'row' }, h('b', { style: { fontSize: '16px' } }, `${j.icon} ${j.label}`),
             fit !== null ? h('span', { class: 'tag', title: 'How well it suits their personality' }, `${'★'.repeat(Math.round(fit * 5))}${'☆'.repeat(5 - Math.round(fit * 5))}`) : null,
-            h('button', { class: `small ${res.d.job?.id === id ? 'active' : 'primary'}`, disabled: locked, title: locked ? 'Opens when the condo is built (more than 10 residents)' : '', style: { marginLeft: 'auto' }, onclick: () => { m.close(); onPick(id); } }, locked ? '🔒 Needs condo' : res.d.job?.id === id || (!res.d.job && id === 'none') ? 'Current' : 'Choose')),
+            h('button', { class: `small ${res.d.job?.id === id ? 'active' : 'primary'}`, disabled: locked, title: locked ? 'Opens when the condo is built (more than 10 residents)' : '', style: { marginLeft: 'auto' }, onclick: () => { m.close(); onPick(id); } }, locked ? (needLv > sim.progress.level ? `🔒 Island Lv ${needLv}` : '🔒 Needs condo') : res.d.job?.id === id || (!res.d.job && id === 'none') ? 'Current' : 'Choose')),
           id === 'none' ? h('div', { class: 'hint' }, 'No work, no pay — more free time.') : h('div', { class: 'hint' }, `${ROOM_LABELS[j.place] || j.place} · ${j.start}:00–${j.end}:00 · ${j.wage} 🪙/h${j.rainOff ? ' · off when it rains' : ''}`),
           j.perk ? h('div', { class: 'hint' }, `Perk: ${j.perk}`) : null,
           coworkers.length ? h('div', { class: 'hint' }, `Coworkers: ${coworkers.join(', ')}`) : null));

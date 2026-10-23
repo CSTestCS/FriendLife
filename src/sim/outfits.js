@@ -8,6 +8,7 @@
 // (and kept until the situation changes).
 
 import { chance, clamp, pick, rand } from '../core/util.js';
+import { isRelative } from './relations.js';
 
 /** Wear-automatically conditions, in the order they are checked (most specific first). */
 export const OUTFIT_CONDITIONS = [
@@ -66,6 +67,40 @@ export function outfitMeta(res, idx) {
   o.tags ||= [];
   o.perception ||= { self: [], others: [] };
   return o;
+}
+
+/** The name of an outfit (-1 = main look). */
+export function outfitName(res, idx = res.d.wearing ?? -1) {
+  if (idx < 0) return res.d.mainOutfit?.name || 'Main look';
+  return res.d.outfits?.[idx]?.name || '';
+}
+
+/** An outfit called "Underwear" can be stripped down to anywhere (no wardrobe needed). */
+export function isUnderwear(res, idx = res.d.wearing ?? -1) {
+  return /underwear/i.test(outfitName(res, idx));
+}
+
+/** Underwear shows: an "Underwear" or "…Incomplete…" outfit, or any wardrobe mishap. */
+export function underwearShowing(res, idx = res.d.wearing ?? -1) {
+  if (res.d.mishap && idx === res.d.wearing) return true;
+  const n = outfitName(res, idx);
+  return /underwear/i.test(n) || /incomplete/i.test(n);
+}
+
+/** Out where others can see (not at home, not swimming). */
+export function inPublic(res) {
+  if (res.inside && res.inside === res.homeKey) return false;
+  return !(res.inWater || res.activity === 'swim');
+}
+
+/** Would they feel embarrassed to be seen in this outfit (in public)? */
+export function embarrassingToWear(res, idx = res.d.wearing ?? -1) {
+  const meta = outfitMeta(res, idx);
+  const self = new Set(meta?.perception?.self || []);
+  const proud = ['sexy', 'cool', 'powerful', 'elegant', 'cute', 'trendy'].some((t) => self.has(t));
+  if (self.has('embarrassing')) return true;
+  if (idx === res.d.wearing && res.d.mishap && !res.d.mishap.owned) return true;
+  return underwearShowing(res, idx) && !proud;
 }
 
 /** Which conditions are true for this resident right now (in priority order). */
@@ -132,6 +167,7 @@ export function wornPerception(res) {
     self.add(m.owned ? 'cool' : 'embarrassing');
     others.add(m.type === 'pajamas' ? 'silly' : 'sloppy');
   }
+  if (underwearShowing(res) && !self.size) self.add('embarrassing');
   return { self, others };
 }
 
@@ -224,6 +260,55 @@ export function updateOutfitPerception(sim, min) {
   }
 }
 
+const SEE_UNDIES = {
+  attracted: ['W-whoa... 😳', 'I can see your underwear! ...not that I mind.', 'Um. Wow. Hi.', '*stares* ...sorry, what were we talking about?'],
+  same: ['Uh, I can see your underwear!', 'Psst! You might want to put some clothes on...', 'Hehe, nice undies!', 'Um... your underwear is showing.'],
+};
+
+/**
+ * Underwear on show in public gets noticed; people who feel embarrassed in
+ * what they wear (or whose underwear shows) go change when someone sees them.
+ * Swimming is the exception. Called every game minute.
+ */
+export function updateExposure(sim, min) {
+  for (const r of sim.residents) {
+    if (r.engaged || r.ko || !r.avatar || r.sleeping || (r.inside && !r.room)) continue;
+    if (!inPublic(r)) continue;
+    const showing = underwearShowing(r);
+    const embarrassed = embarrassingToWear(r);
+    if (!showing && !embarrassed) continue;
+    const near = sim.residents.filter((o) => o !== r && !o.engaged && !o.ko && !o.sleeping && (o.inside || null) === (r.inside || null) && sim.dist(o, r) < 7);
+    if (!near.length) continue;
+    // someone notices the underwear
+    if (showing && chance(0.05 * min) && sim.clock - (r.seenUndiesAt ?? -999) > 10) {
+      r.seenUndiesAt = sim.clock;
+      const o = pick(near);
+      const attracted = sim.settings.romance && !isRelative(o, r) && ((o.d.gender === 'm' && r.d.gender === 'f') || (o.d.gender === 'f' && r.d.gender === 'm'));
+      o.faceTo(r.x, r.z);
+      o.say(pick(attracted ? SEE_UNDIES.attracted : SEE_UNDIES.same), { emoji: attracted ? '😳' : '👀' });
+      if (attracted) {
+        o.setEmotion(chance(0.5) ? 'love' : 'shy', 25);
+        o.changeRel(r.id, 4);
+        const rel = o.rel(r.id);
+        if (!rel.crush && !rel.partner && rel.score > 10 && chance(0.25)) {
+          rel.crush = true;
+          o.addMemory(`Couldn't stop thinking about ${r.name} after seeing them in their underwear`);
+          sim.problems.offer(o, 'confess', { other: r.id });
+        }
+      } else {
+        o.d.needs.fun = clamp(o.d.needs.fun + 4, 0, 100);
+      }
+    }
+    // the wearer reacts: go and get dressed (unless they're proud of it or working)
+    if (embarrassed && !r.working && !r.errand && sim.clock - (r.lastDressTrip ?? -1e9) > 20 && chance(0.06 * min)) {
+      r.say(pick(['Eek! Don\'t look!', 'I need to go change. NOW.', 'Nobody saw that, right?!', '*covers up* Be right back!']), { emoji: '😳' });
+      r.setEmotion('shy', 40);
+      r.d.happiness = clamp(r.d.happiness - 3, 0, 100);
+      sim.goChange(r, { avoidEmbarrassing: true, say: false });
+    }
+  }
+}
+
 function reactTo(sim, o, r, t, re, self) {
   o.faceTo(r.x, r.z);
   if (!o.plan.length && !o.moving) o.setPlan([{ kind: 'anim', anim: re.anim, dur: 2.2, faceX: r.x, faceZ: r.z }]);
@@ -231,7 +316,7 @@ function reactTo(sim, o, r, t, re, self) {
   o.changeRel(r.id, re.rel);
   if (re.fun) o.d.needs.fun = clamp(o.d.needs.fun + re.fun, 0, 100);
   if (re.mood) o.setEmotion(re.mood, 15);
-  if (re.crush && sim.settings.romance && o.relScore(r.id) > 25) sim.social.maybeCrush(o, r);
+  if (re.crush && sim.settings.romance && o.relScore(r.id) > 25 && !isRelative(o, r)) sim.social.maybeCrush(o, r);
   const proud = [...self].some((s) => POSITIVE.has(s));
   setTimeout(() => {
     if (!sim.residents.includes(r) || r.engaged) return;
@@ -261,7 +346,7 @@ function reactTo(sim, o, r, t, re, self) {
 export const MISHAPS = {
   torn: { label: 'Torn clothes', icon: '🩹', line: 'My clothes got ripped! 😭' },
   pajamas: { label: 'Forgot to get dressed', icon: '🛌', line: 'Wait... I\'m still in my pajamas?!' },
-  shoes: { label: 'Forgot shoes', icon: '🦶', line: 'Huh? Where are my shoes?!' },
+  shoes: { label: 'Half-dressed', icon: '🩲', line: 'Huh? Did I forget my... pants?!' },
   stain: { label: 'Stained clothes', icon: '☕', line: 'Noooo, I spilled all over myself!' },
   inside: { label: 'Wearing it inside out', icon: '🔄', line: 'Is my shirt... inside out?' },
   seam: { label: 'Split seam', icon: '🧵', line: '*RRRIP* ...did anyone hear that?' },
@@ -279,8 +364,20 @@ export function mishapLook(res, avatar, out) {
     case 'seam': set(clothes.filter((s) => ['Bottoms', 'bottom'].includes(s.category)), '#b5a596'); break;
     case 'stain': set(clothes.filter((s) => ['Tops', 'Onepiece', 'top'].includes(s.category)), '#9b6b45'); break;
     case 'inside': set(clothes.filter((s) => ['Tops', 'Onepiece', 'top'].includes(s.category)), '#d8d2c8'); break;
-    case 'shoes': for (const s of slots) if (['Shoes', 'shoes'].includes(s.category) && !out.hidden.includes(s.key)) out.hidden.push(s.key); break;
+    case 'shoes': for (const s of slots) if (['Shoes', 'shoes', 'Bottoms', 'bottom'].includes(s.category) && !out.hidden.includes(s.key)) out.hidden.push(s.key); break;
     default: break;
+  }
+  // parts the player marked as "can be lost in a mishap" (👕 Wardrobe) actually vanish,
+  // so underwear shows; which ones is decided once per mishap
+  if (m.type !== 'pajamas') {
+    const allowed = (out.mishapHide || []).filter((k) => slots.some((s) => s.key === k));
+    if (allowed.length) {
+      if (!m.parts || !m.parts.every((k) => allowed.includes(k))) {
+        const n = 1 + Math.floor(Math.random() * allowed.length);
+        m.parts = [...allowed].sort(() => Math.random() - 0.5).slice(0, n);
+      }
+      for (const k of m.parts) if (!out.hidden.includes(k)) out.hidden.push(k);
+    }
   }
   return out;
 }

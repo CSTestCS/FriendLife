@@ -4,7 +4,7 @@
 import { chance, clamp, rand, pick } from '../core/util.js';
 import { foodById, INJURIES } from './data.js';
 import { TERM_CATEGORIES } from './dialogue.js';
-import { JOBS, jobOf, assignJob } from './jobs.js';
+import { JOBS, jobOf, assignJob, isOnShift } from './jobs.js';
 import { MISHAPS, fixMishap } from './outfits.js';
 
 const PRIORITY = { drowning: 9, mishap: 2, hurt: 5, sick: 5, heartbroken: 4, revenge: 4, makeUp: 3, sad: 3, confess: 3, soaked: 2, hungry: 2, wantFriend: 1, bored: 1, clothes: 1, teachWord: 1, wantJob: 1, quitJob: 2 };
@@ -144,7 +144,7 @@ export class Problems {
         r.d.problem = null;
         r.d.happiness = clamp(r.d.happiness - 6, 0, 100);
       }
-      if (r.d.problem || r.inside || r.engaged) continue;
+      if (r.d.problem || r.inside || r.engaged || (jobOf(r) && isOnShift(r, sim))) continue;
       const n = r.d.needs;
       if (n.hunger < 28 && chance(0.4)) this.offer(r, 'hungry');
       else if (r.d.injuries.some((i) => i.type === 'cold')) this.offer(r, 'sick');
@@ -190,6 +190,7 @@ export class Problems {
       const coins = Math.round(rand(20, 60));
       sim.money += coins;
       sim.gainXp(res, 25);
+      sim.progress?.add(20, 'helped a resident');
       res.d.happiness = clamp(res.d.happiness + 10, 0, 100);
       return coins;
     };

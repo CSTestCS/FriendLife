@@ -11,8 +11,10 @@ import { Dialogue } from './dialogue.js';
 import { thinkIndoors } from './roomBrain.js';
 import { SwimManager } from './swim.js';
 import { Condo } from './condo.js';
+import { updatePriorRelations } from './relations.js';
+import { Progress, residentPerks, updateCelebrities } from './progress.js';
 import { updateJobs, onDuty, jobOf } from './jobs.js';
-import { preferredOutfit, updateOutfitPerception, selfMoodShift, updateMishaps, causeMishap } from './outfits.js';
+import { preferredOutfit, updateOutfitPerception, selfMoodShift, updateMishaps, causeMishap, updateExposure, isUnderwear, embarrassingToWear, fixMishap } from './outfits.js';
 import { INJURIES, line, NAMES, foodById, FOODS, ITEMS } from './data.js';
 import { Emitter, chance, clamp, damp, pick, rand } from '../core/util.js';
 
@@ -23,6 +25,9 @@ export const DEFAULT_SETTINGS = {
   romance: true,
   music: true,
   volume: 0.7,
+  voiceVolume: 1,
+  musicVolume: 0.8,
+  ambientVolume: 1,
   follow: true,
   shadows: true,
   voice: 'speech', // speech | babble | off
@@ -51,11 +56,15 @@ export class Sim extends Emitter {
     this.problems = new Problems(this);
     this.swim = new SwimManager(this);
     this.condo = new Condo(this);
+    this.progress = new Progress(this);
     if (this.rooms) this.rooms.condo = this.condo;
     this.dialogue = new Dialogue(this);
     this.snowmen = [];
     this.lastDay = this.day;
     this.minuteAcc = 0;
+    this.frustum = new THREE.Frustum();
+    this._frustumM = new THREE.Matrix4();
+    this._sphere = new THREE.Sphere();
     this.residentGroup = new THREE.Group();
     this.residentGroup.name = 'residents';
     this.scene.add(this.residentGroup);
@@ -67,6 +76,14 @@ export class Sim extends Emitter {
 
   byId(id) { return this.residents.find((r) => r.id === id) || null; }
   dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
+
+  /** Is (any part of) this resident inside the camera view? */
+  inCameraView(res) {
+    const h = res.headHeight || 1.6;
+    this._sphere.center.set(res.x, res.group.position.y + h * 0.5, res.z);
+    this._sphere.radius = h * 0.75 + 0.6;
+    return this.frustum.intersectsSphere(this._sphere);
+  }
 
   isNear(res) {
     const t = this.stage.controls.target;
@@ -110,6 +127,7 @@ export class Sim extends Emitter {
     res.setExpression(emotionExpr(res.mood()));
     if (announce) {
       this.news(`${data.name} moved to the island! Welcome! 🏡`, '🏡');
+      this.progress.add(30, 'new resident');
       res.say(`Hi! I'm ${data.name}! ${data.catchphrase}`, { emoji: '👋' });
       res.play('wave');
       res.setPlan([{ kind: 'anim', anim: 'wave', dur: 3, expr: { happy: 1 } }]);
@@ -154,10 +172,20 @@ export class Sim extends Emitter {
    * wardrobe (closet spot at home). index = a specific outfit, otherwise the
    * one that fits ctx ({activity, outside}). Fresh clothes also fix a mishap.
    */
-  dressAtWardrobe(res, { index = null, ctx = {}, quiet = true } = {}) {
+  dressAtWardrobe(res, { index = null, ctx = {}, quiet = true, avoidEmbarrassing = false } = {}) {
     if (res.d.mishap && !res.d.mishap.owned) { res.d.mishap = null; if (res.d.problem?.type === 'mishap') { res.d.problem = null; this.emit('problem', res); } res.applyLook(); }
     if (!res.d.outfits?.length || !res.avatar) return null;
-    const want = index ?? preferredOutfit(res, this, ctx);
+    let want = index ?? preferredOutfit(res, this, ctx);
+    if (avoidEmbarrassing && index == null && (want === res.d.wearing || embarrassingToWear(res, want))) {
+      // anything that isn't embarrassing to be seen in
+      const ok = [-1, ...res.d.outfits.map((_, i) => i)].filter((i) => i !== res.d.wearing && !embarrassingToWear(res, i));
+      if (ok.length) want = ok[Math.floor(Math.random() * ok.length)];
+      else {
+        res.say('I have nothing decent to wear... I\'m staying in.', { emoji: '😣' });
+        res.insideUntil = Math.max(res.insideUntil, this.clock + 90);
+        return null;
+      }
+    }
     if (want === res.d.wearing) return null;
     if (res.changing) { res.redress = { index: want, quiet }; return null; }
     res.changing = true;
@@ -168,6 +196,9 @@ export class Sim extends Emitter {
       if (again && again.index !== res.d.wearing) this.changeOutfit(res, again.index, { quiet: again.quiet });
     });
   }
+
+  /** Mend a wardrobe mishap (tailor, sewing kit). */
+  fixMishapFor(res) { fixMishap(this, res, true); }
 
   /** Would the resident wear something else for this? (outfit index or null) */
   outfitFor(res, ctx) {
@@ -180,10 +211,19 @@ export class Sim extends Emitter {
    * Go home to the wardrobe and change. after() runs once they're back
    * outside (e.g. carry on to the beach). Returns false if they can't.
    */
-  goChange(res, { index = null, activity, after = null, say = true, stay = false } = {}) {
-    if (!this.homeOf(res) || res.engaged || res.ko || res.inWater) return false;
+  goChange(res, { index = null, activity, after = null, say = true, stay = false, avoidEmbarrassing = false } = {}) {
+    if (res.engaged || res.ko || res.inWater) return false;
+    // stripping down to underwear works anywhere — no wardrobe needed
+    const target = index ?? (avoidEmbarrassing ? null : preferredOutfit(res, this, { outside: !stay, activity: activity ?? res.activity }));
+    if (target != null && target !== res.d.wearing && isUnderwear(res, target)) {
+      if (activity !== undefined) res.activity = activity;
+      res.lastDressTrip = this.clock;
+      this.changeOutfit(res, target, { quiet: true }).then(() => after?.());
+      return true;
+    }
+    if (!this.homeOf(res)) return false;
     const home = res.homeKey;
-    res.errand = { kind: 'dress', index, activity, after, leave: !stay };
+    res.errand = { kind: 'dress', index, activity, after, leave: !stay, avoidEmbarrassing };
     if (activity !== undefined) res.activity = activity;
     res.lastDressTrip = this.clock;
     if (res.inside === home) { res.clearPlan(); return true; }
@@ -325,12 +365,12 @@ export class Sim extends Emitter {
 
   /** Current price (10% off while a shop clerk is on duty). */
   price(item) {
-    return Math.ceil(item.price * (onDuty(this, 'clerk') ? 0.9 : 1));
+    return Math.ceil(item.price * (onDuty(this, 'clerk') ? 0.9 : 1) * (1 - this.progress.discount));
   }
 
   buy(id) {
     const item = foodById(id) || ITEMS.find((i) => i.id === id);
-    if (!item) return false;
+    if (!item || !this.progress.isAvailable('items', id)) return false;
     const price = this.price(item);
     if (this.money < price) return false;
     this.money -= price;
@@ -351,6 +391,7 @@ export class Sim extends Emitter {
       this.gainXp(res, 30);
       res.setPlan([{ kind: 'anim', anim: 'eatStand', dur: 2.5, expr: { happy: 1 }, emoji: food.icon }, { kind: 'anim', anim: 'cheer', dur: 2.5, say: `${food.name}! My FAVORITE!`, emoji: '😍', expr: { happy: 1 } }]);
       msg = `${res.name} LOVES ${food.icon} ${food.name}! It's their favorite!`;
+      this.progress.add(8, 'favourite food');
       this.audio.levelUp();
     } else if (food.id === res.d.hatedFood) {
       res.d.happiness = clamp(res.d.happiness - 12, 0, 100);
@@ -446,6 +487,7 @@ export class Sim extends Emitter {
     this.gainXp(res, 25);
     res.clearPlan();
     res.setPlan([{ kind: 'anim', anim: 'cheer', dur: 3, say: 'For me?! Yay!', emoji: '🎁', expr: { happy: 1 } }]);
+    this.progress.add(5, 'gift');
     return `${res.name} loved the gift!`;
   }
 
@@ -461,6 +503,7 @@ export class Sim extends Emitter {
 
   /** Have resident a go to b and start an interaction (retries if b is busy). */
   goInteract(a, b, kind, opts = {}) {
+    opts = { force: true, ...opts };
     if (!a || !b) return;
     if (a.inside) a.exit();
     a.clearPlan();
@@ -524,17 +567,22 @@ export class Sim extends Emitter {
 
   gainXp(res, amount) {
     res.d.xp += amount;
-    while (res.d.xp >= 100) {
-      res.d.xp -= 100;
+    // each level takes a bit longer than the last
+    while (res.d.xp >= this.xpForLevel(res.d.level)) {
+      res.d.xp -= this.xpForLevel(res.d.level);
       res.d.level += 1;
       const coins = 50 + res.d.level * 10;
       this.money += coins;
-      this.news(`${res.name} reached level ${res.d.level}! (+${coins} 🪙)`, '⭐');
+      const unlock = res.d.level === 5 ? ' They can now throw house parties! 🎉' : res.d.level === 8 ? ' They\'re now an island celebrity! 🌟' : '';
+      this.news(`${res.name} reached level ${res.d.level}! (+${coins} 🪙)${unlock}`, '⭐');
+      this.progress.add(20, 'resident level');
       this.alert(`⭐ ${res.name} leveled up!`, () => this.select(res), 'level');
       if (this.isNear(res)) this.audio.levelUp();
       if (!res.engaged && !res.inside) res.setPlan([{ kind: 'anim', anim: 'cheer', dur: 3, emoji: '⭐', expr: { happy: 1 } }]);
     }
   }
+
+  xpForLevel(level) { return 100 + (level - 1) * 40; }
 
   buildSnowman(res, x, z) {
     if (this.weather.snowCover < 0.25 || this.snowmen.length >= 4 || this.island.isBlocked(x, z, 0.3)) return;
@@ -547,7 +595,29 @@ export class Sim extends Emitter {
   }
 
   // ------------------------------------------------------------------ main loop
+  /** Every frame (even paused): which residents the camera sees; the rest aren't rendered. */
+  updateVisibility() {
+    const cam = this.stage.camera;
+    cam.updateMatrixWorld();
+    this._frustumM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this._frustumM);
+    for (const r of this.residents) {
+      if (!r.avatar) continue;
+      const inScene = r.inside ? !!r.room && this.viewRoom === r.room : !this.viewRoom;
+      const inView = inScene && this.inCameraView(r);
+      if (inView && !r.inView) {
+        // coming into view: pose them right away (matters while paused)
+        const pose = r.player.update(0);
+        r.avatar.applyPose(pose);
+        r.avatar.update(0);
+      }
+      r.inView = inView;
+      if (r.avatar.root.visible !== inView) r.avatar.root.visible = inView;
+    }
+  }
+
   update(dtReal) {
+    this.updateVisibility();
     const dt = Math.min(dtReal, 0.1) * this.speed;
     if (dt <= 0) return;
     this.realTime += dt;
@@ -557,8 +627,10 @@ export class Sim extends Emitter {
     // daily rollover
     if (this.day !== this.lastDay) {
       this.lastDay = this.day;
-      this.money += 40;
-      this.news(`Good morning! Day ${this.day} begins. Daily island allowance: +40 🪙`, '🌅');
+      const allowance = 40 + this.progress.allowanceBonus;
+      this.money += allowance;
+      this.news(`Good morning! Day ${this.day} begins. Daily island allowance: +${allowance} 🪙`, '🌅');
+      this.progress.add(25, 'new day');
       this.emit('day', this.day);
     }
 
@@ -618,7 +690,8 @@ export class Sim extends Emitter {
         d.wetness = clamp(d.wetness + rate * min);
         if (r.ko) d.wetness = clamp(d.wetness + w.p.rain * 0.1 * min);
       } else {
-        const dry = r.inside ? 0.025 : w.type === 'sunny' ? 0.012 : 0.005;
+        // hair and clothes take a while to dry (indoors a bit faster, in the sun too)
+        const dry = r.inside ? 0.011 : w.type === 'sunny' ? 0.008 : 0.004;
         d.wetness = clamp(d.wetness - dry * min);
       }
       if (d.wetness > 0.7 && !d.swimWet) {
@@ -649,6 +722,7 @@ export class Sim extends Emitter {
       target -= r.painLevel * 0.9 + d.wetness * 14 * (d.swimWet ? 0.1 : 1);
       target += selfMoodShift(r);
       if (r.partnerId()) target += 8;
+      target += residentPerks(d.level).mood;
       const emo = r.mood();
       if (emo === 'love') target += 15;
       if (emo === 'sad') target -= 10;
@@ -678,6 +752,9 @@ export class Sim extends Emitter {
     }
     this.swim.perMinute(min);
     updateOutfitPerception(this, min);
+    updateExposure(this, min);
+    updatePriorRelations(this, min);
+    updateCelebrities(this, min);
     updateMishaps(this, min);
     for (const r of this.residents) {
       if (!r.inside && !r.engaged && !r.inWater && !r.d.mishap && chance(0.00008 * min)) causeMishap(this, r, chance(0.6) ? 'seam' : 'stain');
@@ -729,6 +806,7 @@ export class Sim extends Emitter {
       version: 1,
       clock: this.clock,
       money: this.money,
+      progress: this.progress.serialize(),
       inventory: this.inventory,
       news: this.newsLog.slice(0, 80),
       settings: this.settings,
@@ -746,6 +824,7 @@ export class Sim extends Emitter {
     this.clock = data.clock ?? this.clock;
     this.lastDay = this.day;
     this.money = data.money ?? 300;
+    this.progress.restore(data.progress);
     this.inventory = data.inventory || {};
     this.newsLog = data.news || [];
     this.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };

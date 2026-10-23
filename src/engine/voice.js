@@ -246,7 +246,7 @@ export class VoiceEngine {
       const u = new SpeechSynthesisUtterance(c.text);
       u.pitch = clamp((v.pitch ?? 1) * plan.pitch * c.p, 0, 2);
       u.rate = clamp((v.rate ?? 1) * plan.rate * c.r, 0.3, 3);
-      u.volume = clamp(volume * (v.volume ?? 1) * plan.gain * c.g * (this.audio?.volume ?? 1), 0, 1);
+      u.volume = clamp(volume * (v.volume ?? 1) * plan.gain * c.g * (this.audio?.volume ?? 1) * (this.audio?.levels?.voice ?? 1), 0, 1);
       if (sysVoice) u.voice = sysVoice;
       this.synth.speak(u);
     }
@@ -279,7 +279,7 @@ export class VoiceEngine {
 
     const out = ctx.createGain();
     out.gain.value = clamp(volume * (v.volume ?? 1) * plan.gain, 0, 2) * 1.25;
-    out.connect(a.master);
+    out.connect(a.voiceBus || a.master);
     const nodes = [];
     let t = ctx.currentTime + 0.03;
     const vib = (v.vibrato || 0) * 45 + plan.tremble.depth; // cents
@@ -392,7 +392,7 @@ export class VoiceEngine {
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(Math.max(0.0002, tone), t + 0.012);
       g.gain.exponentialRampToValueAtTime(0.0001, t + step * 0.95);
-      o.connect(bp).connect(g).connect(a.master);
+      o.connect(bp).connect(g).connect(a.voiceBus || a.master);
       o.start(t);
       o.stop(t + step);
       // breathiness: a puff of filtered noise per syllable
@@ -407,7 +407,7 @@ export class VoiceEngine {
         ng.gain.setValueAtTime(0.0001, t);
         ng.gain.exponentialRampToValueAtTime(0.12 * gainAll * v.breath, t + 0.015);
         ng.gain.exponentialRampToValueAtTime(0.0001, t + step);
-        n.connect(nf).connect(ng).connect(a.master);
+        n.connect(nf).connect(ng).connect(a.voiceBus || a.master);
         n.start(t, Math.random());
         n.stop(t + step);
       }

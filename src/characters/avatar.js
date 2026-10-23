@@ -242,6 +242,7 @@ export class Avatar {
     this.wetness = w;
     this.wetUniform.value = w;
     if (this.kind === 'vrm') this._refreshMaterials();
+    this._applyThin();
   }
 
   update(dt) {
@@ -293,38 +294,69 @@ export class Avatar {
   // ------------------------------------------------------------------
   // Material slots, texture swaps, tints and hidden parts ("variations")
 
-  /** List of material slots that can be re-textured / tinted / hidden. */
+  /**
+   * Wardrobe items: one per distinct texture (not per material name). VRoid
+   * exports often reuse a name such as "Onepiece_00_CLOTH" for socks, bra and
+   * panties, each with its own texture; those become separate items. Keys stay
+   * the plain material name for the first item of a name (so older saved looks
+   * keep working) and "name#2", "name#3"… for the others.
+   */
   materialSlots() {
     if (this.kind === 'doll') {
       return ['skin', 'hair', 'top', 'bottom', 'shoes'].map((k) => ({ key: k, label: k, category: k }));
     }
-    const out = [];
-    const seen = new Set();
-    for (const m of this.materials) {
-      const n = baseMatName(m);
-      if (seen.has(n)) continue;
-      seen.add(n);
-      out.push({ key: n, label: n.replace(/^N\d+_\d+_\d+_/, '').replace(/ \(Instance\)$/, ''), category: materialCategory(n) });
-    }
-    if (this.outfit) {
-      for (const m of this.outfit.materials) {
+    if (!this._slots) this._slots = this._buildSlots();
+    return [...this._slots.values()].map(({ mats, ...rest }) => rest);
+  }
+
+  _buildSlots() {
+    const slots = new Map();
+    const add = (list, prefix) => {
+      const groups = new Map(); // name → [texture uuid…] in order of appearance
+      for (const m of list) {
         const n = baseMatName(m);
-        const key = `outfit:${n}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push({ key, label: `👕 ${n.replace(/^N\d+_\d+_\d+_/, '').replace(/ \(Instance\)$/, '')}`, category: materialCategory(n), outfit: true });
+        const tex = m.userData.origMap ? m.userData.origMap.map : m.map || null; // the model's own texture
+        const texId = tex ? tex.uuid : `mat:${m.uuid}`;
+        if (!groups.has(n)) groups.set(n, []);
+        const g = groups.get(n);
+        // outline materials share the main material's texture → same item
+        let i = g.findIndex((x) => x.texId === texId);
+        if (i < 0) { g.push({ texId, tex }); i = g.length - 1; }
+        const key = `${prefix}${n}${i ? `#${i + 1}` : ''}`;
+        if (!slots.has(key)) {
+          const nice = n.replace(/^N\d+_\d+_\d+_/, '').replace(/ \(Instance\)$/, '');
+          slots.set(key, { key, base: n, label: `${prefix ? '👕 ' : ''}${nice}`, category: materialCategory(n), outfit: !!prefix, tex, mats: [] });
+        }
+        const sl = slots.get(key);
+        if (!sl.mats.includes(m)) sl.mats.push(m);
       }
-    }
-    return out;
+      // number duplicates in the label so they can be told apart
+      for (const [n, g] of groups) if (g.length > 1) g.forEach((_, i) => { const sl = slots.get(`${prefix}${n}${i ? `#${i + 1}` : ''}`); if (sl) sl.label += ` (${i + 1}/${g.length})`; });
+    };
+    add(this.materials, '');
+    if (this.outfit) add(this.outfit.materials, 'outfit:');
+    return slots;
+  }
+
+  /** A small preview of an item's texture (data URL) for the wardrobe list. */
+  slotThumb(key, size = 40) {
+    if (this.kind === 'doll') return null;
+    if (!this._slots) this._slots = this._buildSlots();
+    const sl = this._slots.get(key);
+    const img = (sl?.mats[0]?.map || sl?.tex)?.image;
+    if (!img || !img.width) return null;
+    try {
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      c.getContext('2d').drawImage(img, 0, 0, size, size);
+      return c.toDataURL();
+    } catch { return null; }
   }
 
   _materialsForSlot(key) {
     if (this.kind === 'doll') return this.doll.slots[key] ? [this.doll.slots[key]] : [];
-    if (key.startsWith('outfit:')) {
-      const n = key.slice(7);
-      return (this.outfit?.materials || []).filter((m) => baseMatName(m) === n);
-    }
-    return this.materials.filter((m) => baseMatName(m) === key);
+    if (!this._slots) this._slots = this._buildSlots();
+    return this._slots.get(key)?.mats || [];
   }
 
   /**
@@ -332,7 +364,7 @@ export class Avatar {
    * textureStore resolves asset ids to THREE.Texture.
    */
   async applyLook(look, textureStore) {
-    this.look = { textures: { ...(look?.textures || {}) }, tints: { ...(look?.tints || {}) }, hidden: [...(look?.hidden || [])] };
+    this.look = { textures: { ...(look?.textures || {}) }, tints: { ...(look?.tints || {}) }, hidden: [...(look?.hidden || [])], thin: [...(look?.thin || [])] };
     // remember original maps so a look can be removed again
     const allMats = this.kind === 'doll' ? Object.values(this.doll.slots) : [...this.materials, ...(this.outfit?.materials || [])];
     for (const m of allMats) {
@@ -355,6 +387,7 @@ export class Avatar {
           if (hadMap !== !!newMap) m.needsUpdate = true;
         }
         m.visible = !this.look.hidden.includes(slot.key);
+        m.userData.thin = this.look.thin.includes(slot.key);
         const tint = this.look.tints[slot.key];
         m.userData.tint = tint ? new THREE.Color(tint) : null;
         if (this.kind === 'doll' && o.color) {
@@ -366,7 +399,34 @@ export class Avatar {
     this._refreshMaterials();
   }
 
+  /** "Thin" items turn see-through as they get wet. */
+  _applyThin() {
+    const mats = this.kind === 'doll' ? Object.values(this.doll.slots) : [...this.materials, ...(this.outfit?.materials || [])];
+    for (const m of mats) {
+      const thin = !!m.userData.thin;
+      if (!thin && !m.userData.thinWas) continue;
+      const op = thin ? 1 - 0.62 * clamp((this.wetness - 0.15) / 0.75) : 1;
+      if (op < 0.985) {
+        if (!m.userData.thinWas) {
+          m.userData.thinWas = { transparent: m.transparent, depthWrite: m.depthWrite, opacity: m.opacity };
+          m.transparent = true;
+          m.depthWrite = false;
+          m.needsUpdate = true;
+        }
+        m.opacity = op * m.userData.thinWas.opacity;
+      } else if (m.userData.thinWas) {
+        const w = m.userData.thinWas;
+        m.transparent = w.transparent;
+        m.depthWrite = w.depthWrite;
+        m.opacity = w.opacity;
+        m.userData.thinWas = null;
+        m.needsUpdate = true;
+      }
+    }
+  }
+
   _refreshMaterials() {
+    this._applyThin();
     if (this.kind !== 'vrm') return;
     const mats = [...this.materials, ...(this.outfit?.materials || [])];
     for (const m of mats) {
@@ -401,6 +461,7 @@ export class Avatar {
   }
 
   removeOutfit() {
+    this._slots = null;
     if (!this.outfit) return;
     for (const m of this.outfit.meshes) {
       m.removeFromParent();
@@ -472,6 +533,7 @@ export class Avatar {
     // Free the parts we did not take (materials/textures may be shared, so only geometry).
     ovrm.scene.traverse((o) => { if (o.isMesh) o.geometry?.dispose(); });
     this.outfit = { assetId, meshes: taken, materials };
+    this._slots = null;
     this._refreshMaterials();
     return { taken: taken.length, parts: allParts };
   }

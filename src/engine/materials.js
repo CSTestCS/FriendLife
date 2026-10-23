@@ -206,6 +206,7 @@ export function prepareMToonWet(mat) {
     rimPower: mat.parametricRimFresnelPowerFactor,
     rimLift: mat.parametricRimLiftFactor,
     matcapFactor: mat.matcapFactor.clone(),
+    matcap: mat.matcapTexture || null,
     hadMatcap: !!mat.matcapTexture,
   };
   if (!mat.matcapTexture) {
@@ -224,8 +225,14 @@ export function applyMToonWet(mat, wet, tint) {
   mat.color.copy(b.color).multiplyScalar(darken);
   mat.shadeColorFactor.copy(b.shade).multiplyScalar(1 - 0.15 * wet);
   if (tint) { mat.color.multiply(tint); mat.shadeColorFactor.multiply(tint); }
-  if (!b.hadMatcap) mat.matcapFactor.setScalar(0.85 * wet);
-  else mat.matcapFactor.copy(b.matcapFactor).lerp(_c.setScalar(1), wet * 0.6);
+  // the wet sheen replaces the model's own matcap while wet (VRoid exports often ship one)
+  if (wet > 0.03) {
+    if (mat.matcapTexture !== getWetMatcap()) mat.matcapTexture = getWetMatcap();
+    mat.matcapFactor.setScalar(0.9 * wet);
+  } else if (b.hadMatcap) {
+    if (mat.matcapTexture !== b.matcap) mat.matcapTexture = b.matcap;
+    mat.matcapFactor.copy(b.matcapFactor);
+  } else mat.matcapFactor.setScalar(0);
   mat.parametricRimColorFactor.copy(b.rim).lerp(_c.setRGB(0.45, 0.55, 0.7), wet * 0.8);
   mat.parametricRimFresnelPowerFactor = b.rimPower + (3.5 - b.rimPower) * wet;
   mat.parametricRimLiftFactor = b.rimLift + (0.05 - b.rimLift) * wet;

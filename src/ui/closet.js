@@ -135,7 +135,8 @@ function editOutfit(app, res, idx, rerender) {
             select([['', 'Default'], ...vars.map((v) => [v.id, v.name])], o.look.variantId || '', (v) => { o.look.variantId = v || null; })));
         }
       } else {
-        b.append(h('p', { class: 'hint' }, 'Settings for the resident\'s main look (change the look itself in ✏️ Edit or 👕 Wardrobe).'));
+        b.append(h('p', { class: 'hint' }, 'Settings for the resident\'s main look (change the look itself in ✏️ Edit or 👕 Wardrobe).'),
+          h('div', { class: 'field' }, h('label', {}, 'Name'), h('input', { type: 'text', value: o.name || 'Main look', oninput: (e) => { o.name = e.target.value || 'Main look'; } })));
       }
       const checks = (list, arr, set) => {
         const row = h('div', { class: 'tagrow' });
@@ -144,6 +145,7 @@ function editOutfit(app, res, idx, rerender) {
         }
         return row;
       };
+      b.append(h('div', { class: 'hint' }, 'Special names: an outfit called “Underwear” can be changed into anywhere (everything else needs the wardrobe at home). “Underwear” or anything with “Incomplete” in its name shows underwear when worn in public — people notice.'));
       o.tags ||= [];
       b.append(h('div', { class: 'field' }, h('label', {}, 'Wear automatically when…'),
         checks(OUTFIT_TAGS, () => o.tags, (v) => { o.tags = v; }),

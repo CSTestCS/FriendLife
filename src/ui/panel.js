@@ -5,6 +5,8 @@ import { PROBLEM_DEFS } from '../sim/problems.js';
 import { formatClock } from '../core/util.js';
 import { closetSection } from './closet.js';
 import { fixMishap } from '../sim/outfits.js';
+import { PRIOR_TYPES, priorOf, setPrior, priorLabel } from '../sim/relations.js';
+import { perkSummary } from '../sim/progress.js';
 import { jobSection, openJobPicker } from './rooms.js';
 import { openVoiceEditor } from './voiceEditor.js';
 import { assignJob } from '../sim/jobs.js';
@@ -66,7 +68,7 @@ export class Panel {
     const A = (label, fn, opts = {}) => h('button', { title: opts.title || '', disabled: !!opts.disabled, class: opts.cls || '', onclick: fn }, label);
     const inv = sim.inventory;
     el.append(h('div', { class: 'actions' },
-      fight ? A('✋ Stop Fight!', () => { sim.fights.stop(fight); sim.alert('You broke up the fight.'); this.render(); }, { cls: 'danger' }) : null,
+      fight ? A('✋ Stop Fight!', () => { sim.fights.stop(fight); sim.alert('You broke up the fight.'); sim.progress.add(10, 'stopped a fight'); this.render(); }, { cls: 'danger' }) : null,
       A('💬 Talk', () => { const m = sim.talkTo(r); if (m) toast(m); }),
       A('🍙 Feed…', () => this.foodPicker((f) => toast(sim.feed(r, f)))),
       A(`🎁 Gift (${inv.gift || 0})`, () => toast(sim.giveGift(r)), { disabled: !inv.gift }),
@@ -86,6 +88,11 @@ export class Panel {
       A('👕 Wardrobe', () => this.app.openWardrobe(r)),
       A('✏️ Edit', () => this.app.openCreator(r)),
     ));
+
+    // level perks: why levelling residents matters
+    const ps = perkSummary(r.d.level);
+    el.append(h('h3', {}, `Level ${r.d.level} perks`), h('div', { class: 'meta' }, ps.perks.length ? ps.perks.join(' · ') : 'None yet — residents level up by being happy, being helped, learning in class and working.'),
+      ps.next ? h('div', { class: 'hint' }, `Next: ${ps.next}`) : null);
 
     // job
     el.append(h('h3', {}, 'Job'), jobSection(this.app, r, () => this.render()));
@@ -109,6 +116,9 @@ export class Panel {
     const fav = r.knownFood?.[r.d.favFood] ? `${foodById(r.d.favFood)?.icon} ${foodById(r.d.favFood)?.name}` : '❓ (feed them to find out)';
     const hate = r.knownFood?.[r.d.hatedFood] ? `${foodById(r.d.hatedFood)?.icon} ${foodById(r.d.hatedFood)?.name}` : '❓';
     el.append(h('h3', {}, 'About'), h('div', { class: 'meta', html: `Favourite food: <b>${esc(fav)}</b><br>Can't stand: <b>${esc(hate)}</b><br>Catchphrase: <b>“${esc(r.d.catchphrase)}”</b><br>Avatar: <b>${r.d.look.kind === 'vrm' ? esc(sim.library.displayName(r.d.look.assetId)) : 'Built-in doll'}</b>${r.d.outfit ? ` · Outfit: <b>${esc(sim.library.displayName(r.d.outfit.assetId))}</b>` : ''}` }));
+
+    // prior relations (family, rivals, romances the player defines)
+    el.append(h('h3', {}, 'Prior relations'), priorSection(this.app, r, () => this.render()));
 
     // relationships
     el.append(h('h3', {}, 'Relationships'));
@@ -145,7 +155,7 @@ export class Panel {
       bar('💬 Social', n.social),
       bar('❤️ Health', r.health),
       bar('💧 Wetness', r.d.wetness * 100, '#4fb3e8'),
-      bar('⭐ Level XP', r.d.xp, '#f2b134'),
+      bar('⭐ Level XP', (r.d.xp / this.sim.xpForLevel(r.d.level)) * 100, '#f2b134'),
     ].join('');
   }
 
@@ -280,4 +290,56 @@ export class Panel {
       },
     });
   }
+}
+
+/** Profile section: who on the island is family, a rival or a (former) partner. */
+function priorSection(app, r, rerender) {
+  const sim = app.sim;
+  const wrap = h('div', {});
+  const list = Object.keys(r.d.prior || {}).map((id) => sim.byId(id)).filter(Boolean);
+  if (!list.length) wrap.append(h('div', { class: 'meta' }, 'None yet — add family, rivals or a relationship they had before.'));
+  for (const o of list) {
+    const lab = priorLabel(r, o.id);
+    wrap.append(h('div', { class: 'row', style: { gap: '6px' } },
+      h('span', {}, `${lab.icon} ${lab.label}: `, h('b', {}, o.name)),
+      h('button', { class: 'small', style: { marginLeft: 'auto' }, onclick: () => editPrior(app, r, o, rerender) }, '✏'),
+      h('button', { class: 'small', title: 'Remove', onclick: () => { setPrior(sim, r, o, null); rerender(); } }, '✕')));
+  }
+  wrap.append(h('button', { class: 'small blue', style: { marginTop: '6px' }, onclick: () => editPrior(app, r, null, rerender) }, '＋ Add prior relation'));
+  return wrap;
+}
+
+function editPrior(app, r, other, rerender) {
+  const sim = app.sim;
+  const cur = other ? priorOf(r, other.id) : null;
+  let oid = other?.id || sim.residents.find((x) => x !== r && !r.d.prior?.[x.id])?.id || '';
+  let type = cur?.type || 'relative';
+  let variant = cur?.variant || Object.keys(PRIOR_TYPES[type].variants)[0];
+  const m = openModal({
+    title: `Prior relation — ${r.name}`,
+    body: (b) => {
+      const render = () => {
+        b.innerHTML = '';
+        const who = h('select', { onchange: (e) => { oid = e.target.value; } }, ...sim.residents.filter((x) => x !== r).map((x) => h('option', { value: x.id, selected: x.id === oid }, x.name)));
+        const types = h('div', { class: 'row' }, ...Object.entries(PRIOR_TYPES).map(([k, t]) => h('button', { class: `small ${type === k ? 'active' : ''}`, onclick: () => { type = k; variant = Object.keys(t.variants)[0]; render(); } }, `${t.icon} ${t.label}`)));
+        const vars = h('div', { class: 'tagrow' }, ...Object.entries(PRIOR_TYPES[type].variants).map(([k, v]) => h('label', { class: 'tag' }, h('input', { type: 'radio', name: 'pv', checked: k === variant, onchange: () => { variant = k; } }), ` ${v.label}`)));
+        b.append(
+          h('div', { class: 'field' }, h('label', {}, 'Who'), who),
+          h('div', { class: 'field' }, h('label', {}, 'Kind'), types),
+          h('div', { class: 'field' }, h('label', {}, `What they are to ${r.name}`), vars),
+          h('div', { class: 'hint' }, 'Family stays close (and never dates), siblings bicker and prank, rivals compete and argue, nemeses fight, exes are awkward or bitter, couples date and hug. Their relationship starts from here and keeps drifting back toward it. The other resident gets the matching side (parent ↔ child…).'),
+        );
+      };
+      render();
+    },
+    foot: (f) => f.append(h('button', { class: 'primary', onclick: () => {
+      const o = sim.byId(oid);
+      if (!o) return;
+      if (other && other !== o) setPrior(sim, r, other, null);
+      setPrior(sim, r, o, type, variant);
+      m.close();
+      rerender();
+      sim.emit('residents');
+    } }, 'Save')),
+  });
 }

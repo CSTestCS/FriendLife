@@ -5,6 +5,7 @@ import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, INJURIES } from './data.js';
 import { jobOf, isOnShift, planOutdoorWork } from './jobs.js';
 import { causeMishap } from './outfits.js';
+import { residentPerks } from './progress.js';
 
 function swimWeight(res, sim) {
   const w = sim.weather;
@@ -35,9 +36,10 @@ export function think(res, sim) {
   const island = sim.island;
   const home = sim.homeOf(res);
 
-  // --- night: go home and sleep
+  const onClock = !!jobOf(res) && isOnShift(res, sim);
+  // --- night: go home and sleep (not while on the clock — early shifts start before dawn)
   const bedtime = 22 + (res.t.energy - 0.5) * 2;
-  if (hour >= bedtime || hour < 6 || n.energy < 12) {
+  if (!onClock && (hour >= bedtime || hour < 6 || n.energy < 12)) {
     if (home) {
       const wake = 6.5 + rand(0, 1.5);
       let minutes = hour >= 12 ? (24 - hour + wake) * 60 : (wake - hour) * 60;
@@ -71,8 +73,9 @@ export function think(res, sim) {
   }
 
   // --- work shift
+  // on the clock means working — snacks and breaks happen at work
   const job = jobOf(res);
-  if (job && isOnShift(res, sim) && n.energy > 12 && n.hunger > 18) {
+  if (job && onClock) {
     // work clothes come from the wardrobe at home (once per shift)
     if (res.workDressDay !== sim.day) {
       res.workDressDay = sim.day;
@@ -169,6 +172,8 @@ export function think(res, sim) {
     ['home', 0.5 + (1 - res.t.sociability) * 0.7],
     ['pool', sim.condo.active && sim.swim.canSwim(res) ? (w.raining || w.snowing ? 2 : 0.6) + (sim.condo.unitOf(res.id) != null ? 0.6 : 0) : 0],
     ['hallway', sim.condo.unitOf(res.id) != null ? 0.5 + res.t.sociability : 0],
+    ['party', residentPerks(d.level).parties && home && hour >= 16 && hour < 21 && (d.lastParty ?? -1e9) < sim.clock - 24 * 60 ? 0.8 + res.t.sociability : 0],
+    ['class', sim.residents.some((t) => t.working && t.d.job?.id === 'teacher' && !t.inside) ? 1.2 + res.t.quirk : 0],
   ];
   const what = weightedPick(choices);
   const happyExpr = { happy: 0.5 + res.t.energy * 0.3 };
@@ -308,6 +313,37 @@ export function think(res, sim) {
       const door = sim.locationDoor('condo', res);
       if (unit != null && door) {
         res.setPlan([{ kind: 'walk', x: door[0], z: door[1] }, { kind: 'enter', loc: `hall:${sim.condo.floorOf(unit)}`, minutes: rand(15, 30), onExit: () => { n.social = clamp(n.social + 8, 0, 100); } }]);
+        return;
+      }
+      break;
+    }
+    case 'party': {
+      // level 5+: throw a house party and invite friends over
+      d.lastParty = sim.clock;
+      res.setPlan([
+        { kind: 'call', fn: () => res.say('Party at my place! 🎉', { emoji: '🎉' }) },
+        { kind: 'walk', x: home.door[0], z: home.door[1] },
+        { kind: 'enter', loc: res.homeKey, minutes: rand(70, 110), onExit: () => { n.fun = clamp(n.fun + 25, 0, 100); } },
+        { kind: 'call', fn: () => {
+          const guests = sim.residents.filter((o) => o !== res && !o.inside && !o.engaged && !o.ko && !o.sleeping && res.relScore(o.id) > 10 && !(jobOf(o) && isOnShift(o, sim))).sort(() => Math.random() - 0.5).slice(0, 4);
+          for (const g of guests) {
+            const door = sim.locationDoor(res.homeKey, g);
+            if (!door) continue;
+            g.clearPlan();
+            g.setPlan([{ kind: 'walk', x: door[0], z: door[1] }, { kind: 'enter', loc: res.homeKey, minutes: rand(50, 90), onExit: () => { g.d.needs.fun = clamp(g.d.needs.fun + 25, 0, 100); g.d.needs.social = 100; g.changeRel(res.id, 6); } }]);
+          }
+          sim.news(`${res.name} is throwing a house party${guests.length ? ` with ${guests.map((g) => g.name).join(', ')}` : ''}! 🎉`, '🎉');
+        } },
+      ]);
+      return;
+    }
+    case 'class': {
+      // sit in on the teacher's class in the park
+      const t = sim.residents.find((x) => x.working && x.d.job?.id === 'teacher' && !x.inside);
+      if (t) {
+        const a = Math.random() * Math.PI * 2;
+        const x = t.x + Math.cos(a) * 2.2, z = t.z + Math.sin(a) * 2.2;
+        res.setPlan([{ kind: 'walk', x, z }, { kind: 'anim', anim: chance(0.5) ? 'listen' : 'sitGround', dur: rand(15, 30), faceX: t.x, faceZ: t.z, emoji: '📚', expr: { happy: 0.4 } }]);
         return;
       }
       break;

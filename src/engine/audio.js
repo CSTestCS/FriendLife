@@ -8,6 +8,7 @@ export class AudioEngine {
     this.enabled = true;
     this.musicOn = true;
     this.volume = 0.7;
+    this.levels = { voice: 1, music: 1, ambient: 1 }; // separate volume channels
     this.musicTimer = 0;
     this.step = 0;
   }
@@ -20,6 +21,14 @@ export class AudioEngine {
     this.master = this.ctx.createGain();
     this.master.gain.value = this.volume;
     this.master.connect(this.ctx.destination);
+    // channels: voices, music, ambient (weather + sound effects)
+    this.voiceBus = this.ctx.createGain();
+    this.ambientBus = this.ctx.createGain();
+    this.musicBus = this.ctx.createGain();
+    for (const [k, bus] of [['voice', this.voiceBus], ['ambient', this.ambientBus], ['music', this.musicBus]]) {
+      bus.gain.value = this.levels[k];
+      bus.connect(this.master);
+    }
     this.noise = this._noiseBuffer(2);
     // rain bed
     this.rainGain = this.ctx.createGain();
@@ -31,7 +40,7 @@ export class AudioEngine {
     rainF.type = 'bandpass';
     rainF.frequency.value = 2500;
     rainF.Q.value = 0.5;
-    rainSrc.connect(rainF).connect(this.rainGain).connect(this.master);
+    rainSrc.connect(rainF).connect(this.rainGain).connect(this.ambientBus);
     rainSrc.start();
     // wind bed
     this.windGain = this.ctx.createGain();
@@ -43,11 +52,11 @@ export class AudioEngine {
     this.windF = this.ctx.createBiquadFilter();
     this.windF.type = 'lowpass';
     this.windF.frequency.value = 400;
-    windSrc.connect(this.windF).connect(this.windGain).connect(this.master);
+    windSrc.connect(this.windF).connect(this.windGain).connect(this.ambientBus);
     windSrc.start();
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = 0.12;
-    this.musicGain.connect(this.master);
+    this.musicGain.connect(this.musicBus);
   }
 
   _noiseBuffer(sec) {
@@ -64,6 +73,13 @@ export class AudioEngine {
   }
 
   setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = v; }
+
+  /** channel: 'voice' | 'music' | 'ambient' */
+  setLevel(channel, v) {
+    this.levels[channel] = v;
+    const bus = { voice: this.voiceBus, music: this.musicBus, ambient: this.ambientBus }[channel];
+    if (bus) bus.gain.value = v;
+  }
 
   setWeather(rain, wind, snow) {
     if (!this.ctx) return;
@@ -86,7 +102,7 @@ export class AudioEngine {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(this.ambientBus);
     src.start(t, Math.random());
     src.stop(t + dur + 0.05);
   }
@@ -102,7 +118,7 @@ export class AudioEngine {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(gain, t + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(out || this.master);
+    o.connect(g).connect(out || this.ambientBus);
     o.start(t);
     o.stop(t + dur + 0.05);
   }

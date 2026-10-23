@@ -8,6 +8,7 @@
 // headlines and problems for the player to sort out.
 
 import { fightPowerMul, causeMishap } from './outfits.js';
+import { residentPerks } from './progress.js';
 import * as THREE from 'three';
 import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, INJURIES } from './data.js';
@@ -50,7 +51,7 @@ export class Fight {
     res.leaveSeat();
     if (res.engaged && res.engaged !== this) res.engaged.finish?.(true);
     res.engaged = this;
-    const hpMax = 60 + res.t.confidence * 30 + res.t.energy * 15 - res.painLevel;
+    const hpMax = 60 + res.t.confidence * 30 + res.t.energy * 15 - res.painLevel + residentPerks(res.d.level).fightHp;
     this.f.set(res, { side, hp: hpMax, hpMax, cd: rand(0.3, 1.0), action: null, down: false, ko: false, fled: false, downT: 0, hits: 0, landed: 0 });
     this.sides[side].push(res);
     res.play('guard');

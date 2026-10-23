@@ -138,7 +138,7 @@ input[type=color] { width: 34px; height: 26px; border: 2px solid var(--line); bo
 .asset-row .badge { font-size: 11px; background: #fff3e4; padding: 2px 6px; border-radius: 99px; }
 .asset-row .grow { flex: 1; }
 .asset-row img.thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; border: 2px solid var(--line); }
-.slot-row { display: grid; grid-template-columns: 1fr 150px 70px 70px; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.slot-row { display: grid; grid-template-columns: 1fr 150px 70px 44px 44px 52px; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
 .shop-item { display: flex; flex-direction: column; align-items: center; gap: 4px; background: #fff; border-radius: 14px; padding: 10px; box-shadow: 0 2px 0 #f0dcc6; text-align: center; }
 .shop-item .ic { font-size: 32px; }
 .news-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
@@ -203,3 +203,9 @@ body.using-pad, body.using-pad * { cursor: none !important; }
 /* compact top bar on narrower windows: icons only */
 @media (max-width: 1560px) { #topbar .tb-label { display: none; } #topbar button { padding: 6px 9px; } }
 @media (max-width: 1000px) { #topbar .clock { min-width: 0; font-size: 15px; } }
+
+.slot-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.slot-thumb { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--line); background: #fff; }
+
+.lvbar { display: inline-block; width: 46px; height: 6px; border-radius: 3px; background: rgba(0,0,0,0.1); vertical-align: middle; margin-left: 4px; overflow: hidden; }
+.lvbar i { display: block; height: 100%; background: #f2b134; }

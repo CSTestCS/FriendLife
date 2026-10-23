@@ -103,6 +103,7 @@ class App {
       toast('Click a resident to see what they\'re up to. Import your own VRoid avatars from 📦 Library!', 6000);
     }
     this.audio.setVolume(this.sim.settings.volume);
+    for (const [k, ch] of [['voiceVolume', 'voice'], ['musicVolume', 'music'], ['ambientVolume', 'ambient']]) this.audio.setLevel(ch, this.sim.settings[k] ?? 1);
     this.audio.setMusic(this.sim.settings.music);
     this.applyGraphics();
     this.started = true;

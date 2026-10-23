@@ -11,6 +11,7 @@ import { INJURIES, FOODS, CATCHPHRASES, line, DOLL_PALETTES } from './data.js';
 import { angleDamp, clamp, pick, rand, uid, chance, damp } from '../core/util.js';
 import { defaultVoice, normVoice, stylizeLine } from '../engine/voice.js';
 import { mishapLook } from './outfits.js';
+import { priorLabel } from './relations.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -196,22 +197,24 @@ export class Resident {
   }
 
   /** Merge character variant + outfit variant + per-resident overrides (of the worn appearance). */
-  composeLook() {
+  composeLook({ mishap = true } = {}) {
     const lib = this.sim.library;
     const ap = this.appearance();
     const look = ap.look || this.d.look;
-    const out = { textures: {}, tints: {}, hidden: [] };
+    const out = { textures: {}, tints: {}, hidden: [], thin: [], mishapHide: [] };
     const addLook = (l, prefix = '') => {
       if (!l) return;
       for (const [k, v] of Object.entries(l.textures || {})) out.textures[prefix + k] = v;
       for (const [k, v] of Object.entries(l.tints || {})) out.tints[prefix + k] = v;
       for (const k of l.hidden || []) if (!out.hidden.includes(prefix + k)) out.hidden.push(prefix + k);
+      for (const k of l.thin || []) if (!out.thin.includes(prefix + k)) out.thin.push(prefix + k);
+      for (const k of l.mishapHide || []) if (!out.mishapHide.includes(prefix + k)) out.mishapHide.push(prefix + k);
     };
     if (look.kind === 'vrm' && look.assetId && look.variantId) addLook(lib.variant(look.assetId, look.variantId));
     if (ap.outfit?.assetId && ap.outfit.variantId) addLook(lib.variant(ap.outfit.assetId, ap.outfit.variantId), 'outfit:');
     if (ap.outfit?.hideBase) for (const k of ap.outfit.hideBase) if (!out.hidden.includes(k)) out.hidden.push(k);
     addLook(ap.custom);
-    return mishapLook(this, this.avatar, out);
+    return mishap ? mishapLook(this, this.avatar, out) : out;
   }
 
   disposeAvatars() {
@@ -245,6 +248,13 @@ export class Resident {
   }
 
   relLabel(otherId) {
+    const prior = priorLabel(this, otherId);
+    const base = this._relLabel(otherId);
+    // family / rivalry / romance history comes first ("Sibling · Good Friend")
+    return prior ? { label: base.label === prior.label ? prior.label : `${prior.label} · ${base.label}`, icon: prior.icon } : base;
+  }
+
+  _relLabel(otherId) {
     const r = this.d.relationships[otherId];
     if (!r || !r.met) return { label: 'Stranger', icon: '❔' };
     if (r.partner) return { label: 'Sweetheart', icon: '💞' };
@@ -617,11 +627,12 @@ export class Resident {
     if (this.avatar.talking && sim.realTime > (this.talkUntil || 0)) this.avatar.talking = false;
     if (this.bubble && sim.realTime > this.bubble.until) this.bubble = null;
 
-    // animation (skip the expensive part for rooms nobody is looking at)
-    if (!this.inside || (this.room && sim.viewRoom === this.room)) {
-      // ease height when stepping onto/off platforms
-      if (this.groundY === undefined) this.groundY = this.group.position.y;
-      this.group.position.y = damp(this.group.position.y, this.groundY, 16, dt);
+    // ease height when stepping onto/off platforms
+    if (this.groundY === undefined) this.groundY = this.group.position.y;
+    this.group.position.y = damp(this.group.position.y, this.groundY, 16, dt);
+    // only residents the camera can actually see are rendered and fully animated
+    // (the scene being shown: the island, or the room being looked into)
+    if (this.inView) {
       const pose = this.player.update(dt);
       this._applyLookAt(pose, dt);
       this.avatar.applyPose(pose);
@@ -629,6 +640,10 @@ export class Resident {
       this.avatar.solveFootIK((x, z) => this.space.heightAt(x, z), this.group.position.y, ik, dt);
       this.avatar.update(dt);
       this._updateAttachments(dt);
+    } else {
+      // keep animation time (and end-of-clip callbacks) going, skip posing / IK / spring bones
+      this.player.update(dt);
+      for (const o of Object.values(this.attach)) if (o.visible) o.visible = false;
     }
   }
 

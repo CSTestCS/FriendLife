@@ -11,7 +11,9 @@ export function openWardrobe(app, res, onDone) {
   const before = JSON.stringify(ap.custom);
   // Work on the per-resident override layer, starting from the composed look so
   // variant values are visible and editable.
-  const work = res.composeLook();
+  const work = res.composeLook({ mishap: false });
+  work.thin ||= [];
+  work.mishapHide ||= [];
   let changed = false;
 
   const m = openModal({
@@ -32,7 +34,9 @@ export function openWardrobe(app, res, onDone) {
       const textures = () => lib.list('texture');
       const render = () => {
         slotsBox.innerHTML = '';
-        slotsBox.append(h('div', { class: 'slot-row', style: { fontWeight: 800 } }, h('span', {}, 'Part'), h('span', {}, 'Texture'), h('span', {}, 'Tint'), h('span', {}, 'Hide')));
+        slotsBox.append(h('div', { class: 'slot-row', style: { fontWeight: 800 } }, h('span', {}, 'Part'), h('span', {}, 'Texture'), h('span', {}, 'Tint'), h('span', {}, 'Hide'),
+          h('span', { title: 'Thin fabric: turns see-through when wet' }, 'Thin'), h('span', { title: 'Can be lost / ripped off in a wardrobe mishap' }, 'Mishap')));
+        const toggle = (list, key) => h('input', { type: 'checkbox', checked: work[list].includes(key), onchange: (e) => { work[list] = work[list].filter((k) => k !== key); if (e.target.checked) work[list].push(key); apply(); } });
         const slots = res.avatar.materialSlots();
         let lastCat = null;
         for (const s of slots.sort((a, b) => (a.outfit ? 1 : 0) - (b.outfit ? 1 : 0) || a.category.localeCompare(b.category))) {
@@ -41,7 +45,11 @@ export function openWardrobe(app, res, onDone) {
             h('option', { value: '' }, 'Original'), ...textures().map((t) => h('option', { value: t.id, selected: work.textures[s.key] === t.id }, lib.displayName(t.id))));
           const tint = h('input', { type: 'color', value: work.tints[s.key] || '#ffffff', oninput: (e) => { work.tints[s.key] = e.target.value; if (e.target.value.toLowerCase() === '#ffffff') delete work.tints[s.key]; apply(); } });
           const hide = h('input', { type: 'checkbox', checked: work.hidden.includes(s.key), onchange: (e) => { work.hidden = work.hidden.filter((k) => k !== s.key); if (e.target.checked) work.hidden.push(s.key); apply(); } });
-          slotsBox.append(h('div', { class: 'slot-row' }, h('span', { title: s.key }, s.label), texSel, h('span', {}, tint, ' ', h('button', { class: 'small', title: 'Reset tint', onclick: () => { delete work.tints[s.key]; tint.value = '#ffffff'; apply(); } }, '↺')), hide));
+          const thumb = res.avatar.slotThumb?.(s.key);
+          slotsBox.append(h('div', { class: 'slot-row' },
+            h('span', { title: s.key, class: 'slot-name' }, thumb ? h('img', { src: thumb, class: 'slot-thumb', alt: '' }) : null, s.label),
+            texSel, h('span', {}, tint, ' ', h('button', { class: 'small', title: 'Reset tint', onclick: () => { delete work.tints[s.key]; tint.value = '#ffffff'; apply(); } }, '↺')), hide,
+            toggle('thin', s.key), toggle('mishapHide', s.key)));
         }
       };
       render();
@@ -84,6 +92,7 @@ export function openWardrobe(app, res, onDone) {
       textures: pick(work.textures),
       tints: pick(work.tints),
       hidden: work.hidden.filter((k) => isOutfit === k.startsWith('outfit:')).map((k) => (isOutfit ? k.slice(7) : k)),
+      thin: work.thin.filter((k) => isOutfit === k.startsWith('outfit:')).map((k) => (isOutfit ? k.slice(7) : k)),
     };
     const assetId = isOutfit ? ap.outfit.assetId : ap.look.assetId;
     const v = await lib.saveVariant(assetId, look);
@@ -94,6 +103,8 @@ export function openWardrobe(app, res, onDone) {
       textures: Object.fromEntries(Object.entries(work.textures).filter(([k]) => keep(k))),
       tints: Object.fromEntries(Object.entries(work.tints).filter(([k]) => keep(k))),
       hidden: work.hidden.filter(keep),
+      thin: work.thin.filter(keep),
+      mishapHide: work.mishapHide, // which parts can be lost in a mishap stays with this resident's outfit
     };
     await res.applyLook();
     toast(`Saved variant “${name}” — other residents can use it too.`);

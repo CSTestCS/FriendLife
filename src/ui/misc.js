@@ -20,10 +20,13 @@ export function openShop(app) {
           b.append(h('h3', {}, title));
           const grid = h('div', { class: 'grid3', style: { gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' } });
           for (const it of list) {
-            grid.append(h('div', { class: 'shop-item', title: it.desc || '' }, h('div', { class: 'ic' }, it.icon), h('b', {}, it.name),
+            const need = sim.progress.levelFor('items', it.id);
+            const locked = need > sim.progress.level;
+            grid.append(h('div', { class: 'shop-item', title: it.desc || '', style: locked ? { opacity: 0.55 } : {} }, h('div', { class: 'ic' }, locked ? '🔒' : it.icon), h('b', {}, it.name),
               it.desc ? h('div', { class: 'hint' }, it.desc) : null,
               h('div', { class: 'hint' }, `Owned: ${sim.inventory[it.id] || 0}`),
-              h('button', { class: 'primary small', disabled: sim.money < sim.price(it), onclick: () => { if (sim.buy(it.id)) render(); } }, `Buy · ${sim.price(it)} 🪙`)));
+              locked ? h('div', { class: 'tag' }, `Island level ${need}`)
+                : h('button', { class: 'primary small', disabled: sim.money < sim.price(it), onclick: () => { if (sim.buy(it.id)) render(); } }, `Buy · ${sim.price(it)} 🪙`)));
           }
           b.append(grid);
         };
@@ -107,7 +110,9 @@ export function openSettings(app, focus) {
         right.append(h('h3', {}, 'Audio & view'));
         right.append(
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.music, onchange: (e) => { st.music = e.target.checked; sim.audio.setMusic(st.music); } }), ' Music'),
-          h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Volume'), h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: st.volume, oninput: (e) => { st.volume = +e.target.value; sim.audio.setVolume(st.volume); } })),
+          h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Master'), h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: st.volume, oninput: (e) => { st.volume = +e.target.value; sim.audio.setVolume(st.volume); } })),
+          ...[['voiceVolume', 'voice', '🗣️ Voices'], ['musicVolume', 'music', '🎵 Music'], ['ambientVolume', 'ambient', '🌧️ Ambient & effects']].map(([key, ch, label]) =>
+            h('div', { class: 'row' }, h('span', { class: 'lbl' }, label), h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: st[key] ?? 1, oninput: (e) => { st[key] = +e.target.value; sim.audio.setLevel(ch, st[key]); } }))),
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.follow, onchange: (e) => { st.follow = e.target.checked; } }), ' Camera follows selected resident'),
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.shadows, onchange: (e) => { st.shadows = e.target.checked; app.applyGraphics(); } }), ' Shadows'),
           h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Resolution'), ...['low', 'high'].map((q) => h('button', { class: `small ${st.quality === q ? 'active' : ''}`, onclick: () => { st.quality = q; app.applyGraphics(); render(); } }, q))),

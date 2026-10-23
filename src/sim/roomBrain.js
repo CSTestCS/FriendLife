@@ -25,7 +25,7 @@ function routines(res, sim, room) {
     res.setPlan([
       ...use('closet', 3, { anim: 'dress', emoji: '👚', then: () => {
         res.errand = null;
-        sim.dressAtWardrobe(res, { index: e.index, ctx: e.leave ? { outside: true, activity: e.activity } : {} });
+        sim.dressAtWardrobe(res, { index: e.index, ctx: e.leave ? { outside: true, activity: e.activity } : {}, avoidEmbarrassing: e.avoidEmbarrassing });
         if (e.leave) {
           if (e.after) res.onExit = e.after;
           res.insideUntil = Math.min(res.insideUntil, sim.clock + 1);

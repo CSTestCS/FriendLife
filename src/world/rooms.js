@@ -70,6 +70,7 @@ const LAYOUTS = {
     entry: [-3.4, 2.2, Math.PI / 2],
     spots: [
       { type: 'work', job: 'barista', x: 0, z: -2.35, rot: 0, anim: 'eatStand' },
+      { type: 'work', job: 'chef', x: -1.25, z: -2.35, rot: 0, anim: 'eatStand' },
       { type: 'order', x: 0, z: -0.8, rot: Math.PI, anim: 'talk' },
       ...[[-2.5, 0.6], [0.4, 1.4], [2.7, 0.6]].flatMap(([x, z]) => [
         { type: 'table', x: x - 0.75, z, rot: Math.PI / 2, anim: 'eat' },
@@ -83,6 +84,7 @@ const LAYOUTS = {
     entry: [-3.4, 2.2, Math.PI / 2],
     spots: [
       { type: 'work', job: 'clerk', x: 2.9, z: -0.6, rot: -Math.PI / 2, anim: 'idle' },
+      { type: 'work', job: 'tailor', x: -1.6, z: 0.3, rot: 0.3, anim: 'think' },
       { type: 'browse', x: -2.4, z: -1.8, rot: Math.PI, anim: 'think' },
       { type: 'browse', x: -0.8, z: -1.8, rot: Math.PI, anim: 'idleLook' },
       { type: 'browse', x: 0.8, z: -1.8, rot: Math.PI, anim: 'think' },
@@ -331,9 +333,16 @@ export class Room {
       obstacleBox(3.3, -2.6, 0.9, 0.35);
       // bookshelf
       const shelf = new THREE.Group();
-      shelf.add(box(1.2, 1.9, 0.35, wood, 0, 0.95, 0));
+      // a real open shelf (back, sides, boards) so books sit inside it instead of
+      // sharing a face with a solid box (that flickered)
+      shelf.add(box(1.2, 1.9, 0.04, wood, 0, 0.95, -0.155));
+      shelf.add(box(0.05, 1.9, 0.35, wood, -0.575, 0.95, 0), box(0.05, 1.9, 0.35, wood, 0.575, 0.95, 0));
+      for (let r = 0; r < 5; r++) shelf.add(box(1.1, 0.04, 0.33, wood, 0, 0.13 + r * 0.45, 0.005));
       const bookCols = ['#e05a4f', '#4fb3e8', '#ffd166', '#06d6a0', '#9b5de5'];
-      for (let r = 0; r < 4; r++) for (let i = 0; i < 6; i++) shelf.add(box(0.12, 0.3, 0.25, stdMat(bookCols[(r + i) % 5], { snow: false }), -0.45 + i * 0.17, 0.3 + r * 0.45, 0.05));
+      for (let r = 0; r < 4; r++) for (let i = 0; i < 6; i++) {
+        const hgt = 0.26 + ((r * 7 + i * 3) % 4) * 0.025;
+        shelf.add(box(0.12, hgt, 0.24, stdMat(bookCols[(r + i) % 5], { snow: false }), -0.43 + i * 0.17, 0.152 + r * 0.45 + hgt / 2, 0.01));
+      }
       add(shelf, -0.85, -2.75, 0);
       obstacleBox(-0.85, -2.75, 0.6, 0.2);
       // wardrobe on the left wall

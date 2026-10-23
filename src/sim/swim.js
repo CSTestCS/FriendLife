@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { chance, clamp, pick, rand } from '../core/util.js';
 import { jobOf } from './jobs.js';
+import { residentPerks } from './progress.js';
 
 const GUARD_JOB = { beach: 'lifeguard', pool: 'poolguard' };
 const GIVE_UP = 45; // seconds (at 1x) before the waves wash a struggling swimmer ashore
@@ -65,7 +66,7 @@ export class SwimManager {
     for (const r of sim.residents) {
       if (!r.inWater || r.engaged || r.ko || this.cases.some((c) => c.victim === r || c.rescuer === r)) continue;
       const place = this.placeOf(r);
-      let risk = 0.0016 * (1 + (1 - r.t.energy) * 0.6 + (r.d.needs.energy < 30 ? 2 : 0) + r.painLevel / 10 + (r.d.needs.hunger > 92 ? 1 : 0));
+      let risk = 0.0016 * (1 + (1 - r.t.energy) * 0.6 + (r.d.needs.energy < 30 ? 2 : 0) + r.painLevel / 10 + (r.d.needs.hunger > 92 ? 1 : 0)) * residentPerks(r.d.level).swimRisk;
       if (place === 'beach') risk *= 1 + (w.stormy ? 5 : 0) + (w.raining ? 1.5 : 0) + (w.p?.wind || 0) * 2;
       else risk *= 0.45;
       const guard = this.guardOnDuty(place, this.spaceOf(r));
@@ -244,10 +245,12 @@ export class SwimManager {
         sim.money += tip;
         if (r.d.job) r.d.job.xp = (r.d.job.xp || 0) + 120;
         sim.news(`Lifeguard ${r.name} rescued ${v.name}! The island tipped +${tip} 🪙`, '🛟');
-      } else sim.news(`${r.name} bravely swam out and saved ${v.name}!`, '💪');
+        sim.progress?.add(30, 'rescue');
+      } else { sim.news(`${r.name} bravely swam out and saved ${v.name}!`, '💪'); sim.progress?.add(25, 'rescue'); }
       setTimeout(() => { if (sim.residents.includes(r) && !r.engaged) r.setPlan([{ kind: 'anim', anim: 'idle', dur: 2 }]); }, 2000);
     } else {
       sim.news(`${v.name} grabbed your life ring and made it back to shore. Phew!`, '🛟');
+      sim.progress?.add(25, 'rescue');
     }
     v.say('*cough cough* ...I\'m okay.', { emoji: '💦' });
   }

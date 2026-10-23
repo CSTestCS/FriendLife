@@ -3,6 +3,7 @@
 // and their work gives perks to everyone else.
 
 import { chance, clamp, pick, rand } from '../core/util.js';
+import { residentPerks } from './progress.js';
 
 export const JOBS = {
   none: { label: 'Unemployed', icon: '🛋️', desc: 'Free as a bird.' },
@@ -28,7 +29,7 @@ export const JOBS = {
     label: 'Gardener', icon: '🌷', place: 'park', start: 7, end: 13, wage: 4,
     titles: ['Weed Puller', 'Gardener', 'Head Gardener', 'Island Botanist'], anims: ['eatStand', 'think', 'exercise'],
     fit: { kindness: 0.5, sociability: -0.5, energy: 0.3 }, rainOff: true,
-    perk: 'Residents relaxing in the park have more fun.',
+    perk: 'Residents relaxing in the park have more fun, and the garden yields fresh apples for your inventory.',
   },
   fisher: {
     label: 'Fisher', icon: '🎣', place: 'pier', start: 5, end: 11, wage: 4,
@@ -55,6 +56,36 @@ export const JOBS = {
     serve: 'Walk, don\'t run, {b}!',
     perk: 'Watches the condo\'s indoor pool and rescues anyone in trouble.',
   },
+  chef: {
+    label: 'Chef', icon: '🍳', place: 'cafe', indoor: true, start: 11, end: 20, wage: 6,
+    titles: ['Kitchen Hand', 'Cook', 'Head Chef', 'Master Chef'], anims: ['eatStand', 'think', 'eatStand'],
+    serve: 'Order up! One {food} for {b}!', fit: { quirk: 0.5, energy: 0.4, kindness: 0.3 },
+    perk: 'Café meals fill residents up completely and cheer them up; cooks dishes for your inventory.',
+  },
+  tailor: {
+    label: 'Tailor', icon: '🧵', place: 'shop', indoor: true, start: 9, end: 17, wage: 5,
+    titles: ['Apprentice', 'Tailor', 'Master Tailor', 'Fashion Designer'], anims: ['think', 'eatStand', 'idle'],
+    serve: 'Let me fix that for you, {b}.', fit: { kindness: 0.5, energy: -0.3, quirk: 0.4 },
+    perk: 'Mends wardrobe mishaps of anyone who comes to the shop and sews Sewing Kits for your inventory.',
+  },
+  police: {
+    label: 'Police Officer', icon: '👮', place: 'patrol', start: 12, end: 22, wage: 6,
+    titles: ['Cadet', 'Officer', 'Sergeant', 'Island Sheriff'], anims: ['idleLook', 'point', 'idle'],
+    fit: { confidence: 0.8, kindness: 0.4, temper: -0.4 },
+    perk: 'Breaks up fights nearby right away, and residents argue, insult and prank less while on patrol.',
+  },
+  paramedic: {
+    label: 'Paramedic', icon: '🚑', place: 'patrol', start: 8, end: 18, wage: 7,
+    titles: ['First Aider', 'Paramedic', 'Senior Paramedic', 'Chief Paramedic'], anims: ['idleLook', 'think', 'idle'],
+    fit: { kindness: 0.9, confidence: 0.4, energy: 0.3 },
+    perk: 'Rushes to hurt or knocked-out residents and treats them on the spot (no first-aid kit needed).',
+  },
+  teacher: {
+    label: 'Teacher', icon: '📚', place: 'park', start: 9, end: 15, wage: 6,
+    titles: ['Tutor', 'Teacher', 'Head Teacher', 'Professor'], anims: ['talk', 'point', 'think'],
+    fit: { kindness: 0.6, sociability: 0.6, confidence: 0.4 },
+    perk: 'Residents near the class gain levels faster and have fun learning; they also pick up new words.',
+  },
   mail: {
     label: 'Mail Carrier', icon: '📮', place: 'route', start: 8, end: 12, wage: 5,
     titles: ['Paper Kid', 'Mail Carrier', 'Postmaster', 'Island Postmaster General'], anims: ['wave'],
@@ -78,7 +109,7 @@ export function jobTitle(res) {
 
 export function jobWage(res) {
   const j = jobOf(res);
-  return j ? j.wage * (1 + (res.d.job.level || 0) * 0.35) : 0;
+  return j ? j.wage * (1 + (res.d.job.level || 0) * 0.35) * residentPerks(res.d.level).wageMul : 0;
 }
 
 /** 0..1 how well the job suits the resident's personality. */
@@ -136,17 +167,21 @@ export function updateJobs(sim, min) {
     const pay = (jobWage(r) / 60) * min;
     sim.money += pay;
     job.earned = (job.earned || 0) + pay;
-    job.xp = (job.xp || 0) + min;
+    job.xp = (job.xp || 0) + min * residentPerks(r.d.level).promoMul;
     r.d.needs.energy = clamp(r.d.needs.energy - min * 0.02, 0, 100);
     r.d.needs.social = clamp(r.d.needs.social + min * 0.03, 0, 100);
-    // liking the job
+    // snacks on the job, and the work itself keeps them busy (no wandering off out of boredom)
+    if (r.d.needs.hunger < 40) r.d.needs.hunger = clamp(r.d.needs.hunger + min * 0.25, 0, 100);
     const fit = jobFit(j, r.t);
+    r.d.needs.fun = clamp(r.d.needs.fun + (fit - 0.2) * 0.06 * min, 0, 100);
+    // liking the job
     r.d.happiness = clamp(r.d.happiness + (fit - 0.45) * 0.02 * min, 0, 100);
     if (fit < 0.3 && chance(0.0006 * min)) sim.problems.offer(r, 'quitJob', {});
     // promotion
     if (job.xp >= XP_PER_LEVEL * ((job.level + 1) ** 1.6) && job.level < j.titles.length - 1) {
       job.level++;
       sim.news(`${r.name} got promoted to ${j.titles[job.level]}! ${j.icon}`, '🎉');
+      sim.progress?.add(20, 'promotion');
       sim.gainXp(r, 40);
       r.setEmotion('happy', 240);
       if (!r.engaged) r.say(`I got promoted! ${j.icon}`, { emoji: '🎉' });
@@ -169,6 +204,88 @@ export function updateJobs(sim, min) {
   if (onDuty(sim, 'lifeguard')) {
     const b = sim.locations.beach;
     for (const r of sim.residents) if (!r.inside && Math.hypot(r.x - b.x, r.z - b.z) < 12) r.d.needs.fun = clamp(r.d.needs.fun + 0.15 * min, 0, 100);
+  }
+  const give = (id, n = 1) => { sim.inventory[id] = (sim.inventory[id] || 0) + n; sim.emit('inventory'); };
+  if (onDuty(sim, 'gardener') && chance(0.012 * min)) {
+    give('apple');
+    if (chance(0.3)) sim.news(`The gardener picked fresh apples — they're in your inventory! 🍎`, '🌷');
+  }
+  if (onDuty(sim, 'chef')) {
+    if (chance(0.01 * min)) {
+      const dish = pick(['onigiri', 'curry', 'ramen', 'pancakes', 'pizza', 'cake']);
+      give(dish);
+      if (chance(0.3)) sim.news(`The chef cooked a dish for you — check your inventory!`, '🍳');
+    }
+    for (const r of sim.residents) {
+      if (r.inside !== 'cafe' || r.d.job?.id === 'chef') continue;
+      r.d.needs.hunger = clamp(r.d.needs.hunger + 0.6 * min, 0, 100);
+      r.d.happiness = clamp(r.d.happiness + 0.04 * min, 0, 100);
+    }
+  }
+  if (onDuty(sim, 'tailor')) {
+    for (const r of sim.residents) {
+      if (r.inside === 'shop' && r.d.mishap) {
+        sim.fixMishapFor?.(r);
+        r.say('The tailor fixed my clothes! Thank you!', { emoji: '🧵' });
+      }
+    }
+    if (chance(0.006 * min)) give('sewkit');
+  }
+  if (onDuty(sim, 'teacher')) {
+    const teacher = sim.residents.find((r) => r.working && r.d.job?.id === 'teacher');
+    if (teacher && !teacher.inside) {
+      for (const r of sim.residents) {
+        if (r === teacher || r.inside || sim.dist(r, teacher) > 10) continue;
+        sim.gainXp(r, 0.35 * min);
+        r.d.needs.fun = clamp(r.d.needs.fun + 0.1 * min, 0, 100);
+      }
+    }
+  }
+  updateResponders(sim);
+}
+
+/** Police break up fights; paramedics treat hurt residents. */
+function updateResponders(sim) {
+  for (const r of sim.residents) {
+    if (!r.working || r.engaged || r.ko || r.inside) continue;
+    const id = r.d.job?.id;
+    if (id === 'police') {
+      const f = sim.fights.active.find((x) => !x.done && !x.f.has(r) && sim.dist(r, { x: x.center.x, z: x.center.z }) < 35 && !x.fighters().some((p) => p.inside));
+      if (f && r.respondingTo !== f) {
+        r.respondingTo = f;
+        r.say(pick(['Break it up!', 'Police! Stop right there!', 'Hey! Knock it off!']), { emoji: '👮' });
+        r.clearPlan();
+        r.setPlan([
+          { kind: 'walk', x: f.center.x, z: f.center.z + 1, run: true, stopDist: 1.5 },
+          { kind: 'call', fn: () => {
+            r.respondingTo = null;
+            if (!f.done) { f.end(-1, 'brokenUp', r); sim.news(`Officer ${r.name} broke up a fight.`, '👮'); sim.gainXp(r, 10); }
+          } },
+          { kind: 'anim', anim: 'point', dur: 3, say: 'Settle down, both of you.', emoji: '👮' },
+        ]);
+      }
+    } else if (id === 'paramedic') {
+      if (r.respondingTo && sim.residents.includes(r.respondingTo)) continue;
+      const patient = sim.residents.find((p) => p !== r && !p.inside && !p.engaged && (p.ko || p.d.injuries.some((i) => !i.treated)) && sim.dist(r, p) < 45 && (p.paramedicAt ?? -1e9) < sim.clock - 120);
+      if (patient) {
+        r.respondingTo = patient;
+        patient.paramedicAt = sim.clock;
+        r.clearPlan();
+        r.setPlan([
+          { kind: 'call', fn: () => r.say(pick(['Paramedic coming through!', 'Hang on, I\'m coming!']), { emoji: '🚑' }) },
+          { kind: 'walk', x: patient.x + 0.8, z: patient.z, run: true, stopDist: 0.6 },
+          { kind: 'anim', anim: 'think', dur: 3, faceX: patient.x, faceZ: patient.z, emoji: '🩹' },
+          { kind: 'call', fn: () => {
+            r.respondingTo = null;
+            if (!sim.residents.includes(patient)) return;
+            if (patient.d.injuries.length) sim.treat(patient);
+            patient.changeRel(r.id, 6);
+            sim.gainXp(r, 8);
+            if (chance(0.4)) sim.news(`Paramedic ${r.name} patched up ${patient.name}.`, '🚑');
+          } },
+        ]);
+      }
+    }
   }
 }
 
@@ -229,6 +346,24 @@ export function planOutdoorWork(res, sim) {
         const p = island.shorePoint();
         work(p.x, p.z - 0.5, 0, rand(10, 20));
       }
+      return true;
+    }
+    case 'police': case 'paramedic': {
+      // patrol: plaza, around the houses, the beach…
+      const spots = res.d.job.id === 'paramedic' ? [loc.clinic?.door, loc.plaza ? [loc.plaza.x, loc.plaza.z] : null] : [[loc.plaza.x, loc.plaza.z], [loc.park.x, loc.park.z], [loc.beach.x, loc.beach.z - 4], [loc.stage.entry?.[0] ?? loc.stage.x, loc.stage.entry?.[1] ?? loc.stage.z]];
+      const s = pick(spots.filter(Boolean));
+      const p = chance(0.4) ? island.randomPoint(4, 30) : { x: s[0] + rand(-2, 2), z: s[1] + rand(-2, 2) };
+      work(p.x, p.z, undefined, rand(8, 16));
+      return true;
+    }
+    case 'teacher': {
+      // class in the park
+      const x = loc.park.x + rand(-2, 2), z = loc.park.z + rand(-2, 2);
+      res.setPlan([
+        { kind: 'walk', x, z },
+        { kind: 'call', fn: () => { res.working = true; } },
+        { kind: 'anim', anim: 'talk', dur: rand(15, 25), loopSay: () => pick(['Today\'s lesson: friendship!', 'Who can tell me what 2 + 2 is?', 'Pop quiz!', 'Pay attention, class!', sim.dialogue.fill('Let\'s learn about {hobby}!', { a: res })]), emoji: '📚' },
+      ]);
       return true;
     }
     case 'mail': {

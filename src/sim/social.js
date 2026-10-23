@@ -4,6 +4,9 @@
 // can escalate into fist fights (fight.js).
 
 import { outfitSocialBias } from './outfits.js';
+import { priorSocialBias, isRelative } from './relations.js';
+import { jobOf, isOnShift, onDuty } from './jobs.js';
+import { residentPerks } from './progress.js';
 import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, TOPICS } from './data.js';
 
@@ -224,7 +227,7 @@ function buildScript(it) {
       S.push({ dur: 2.5, a: { anim: 'shy', expr: { blush: 1, happy: 0.3 }, emoji: '💓' }, b: LISTEN() });
       S.push({ dur: 3, a: { anim: 'talk', say: line('confess'), expr: { blush: 1, happy: 0.5 } }, b: { anim: 'idle', expr: { surprised: 0.8 }, emoji: '❗' } });
       S.push({ dur: 2.5, b: { anim: 'think', expr: { relaxed: 0.3 }, emoji: '💭' }, a: { anim: 'shy', expr: { blush: 1 } } });
-      const p = clamp(0.25 + (rb.score - 35) / 70 + (b.partnerId() ? -0.6 : 0) + (it.opts.boost || 0), 0.03, 0.95);
+      const p = clamp(0.25 + (rb.score - 35) / 70 + (b.partnerId() ? -0.6 : 0) + (it.opts.boost || 0) + residentPerks(a.d.level).romance, 0.03, 0.95);
       const yes = chance(p);
       if (yes) {
         S.push({ dur: 3, b: { anim: 'cheer', say: line('accept'), expr: { happy: 1, blush: 1 }, emoji: '💖' }, a: { anim: 'cheer', expr: { happy: 1, blush: 1 } } });
@@ -408,6 +411,8 @@ export class Social {
   start(a, b, kind, opts = {}) {
     if (!a || !b || a === b) return null;
     if (a.engaged || b.engaged || a.ko || b.ko) return null;
+    // people on the clock keep working (the player can still set things up)
+    if (!opts.force && [a, b].some((x) => jobOf(x) && isOnShift(x, this.sim))) return null;
     // indoors only between people in the same room instance
     if (a.inside || b.inside) {
       if (!opts.indoor || a.inside !== b.inside || !a.room) return null;
@@ -480,13 +485,18 @@ export class Social {
       // bold residents with a big crush may confess without asking the player first
       ['confess', sim.settings.romance && ra.crush && !ra.partner && r > 65 ? t.confidence * 1.2 * ob.confess : 0],
     ];
+    // their history (family, rivals, exes, spouses…) shapes what they do together
+    const pb = priorSocialBias(a, b);
+    for (const e of w) e[1] *= pb[e[0]] ?? 1;
+    // a police officer on patrol keeps tempers down
+    if (onDuty(sim, 'police')) for (const e of w) if (['argue', 'insult', 'prank'].includes(e[0])) e[1] *= 0.6;
     return weightedPick(w);
   }
 
   maybeCrush(a, b) {
     if (!this.sim.settings.romance) return;
     const r = a.rel(b.id);
-    if (r.crush || r.partner || r.score < 50) return;
+    if (r.crush || r.partner || r.score < 50 || isRelative(a, b)) return;
     if (chance(0.1 + (r.score - 50) / 250)) {
       r.crush = true;
       a.addMemory(`Developed a crush on ${b.name}`);

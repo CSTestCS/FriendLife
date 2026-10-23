@@ -86,9 +86,29 @@ At **bedtime** residents brush their teeth, change into whatever they sleep in, 
 
 There's always a small chance of a **wardrobe mishap**: clothes **torn in a fight** (the most common), **forgetting to get dressed** (out in their pyjamas — or barefoot if they have no sleepwear), a **split seam** while exercising, a **coffee stain** at the café, a shirt **inside out**. Some aren't noticed right away, but other residents are quick to point them out ("Psst... you're still in your pajamas!"); then the resident gets embarrassed and usually goes straight home to change — or asks you what to do: go home and change, fix it with a **🧵 Sewing Kit**, or **own it** 😎. Changing into another outfit also fixes it.
 
+**Wardrobe mishaps always leave underwear showing**: the parts you tick in the 👕 Wardrobe's **Mishap** column vanish while it lasts (otherwise clothes look torn / stained / are missing). Until it's mended or they change, it counts as an incomplete outfit.
+
+### Underwear, incomplete & embarrassing outfits
+
+- An outfit **named "Underwear"** can be changed into anywhere — everything else still needs the wardrobe at home.
+- Wearing "Underwear", any outfit with **"Incomplete"** in its name, or having a mishap means **underwear shows**. Out in public (anywhere but their own home) and not swimming, others notice ("Uh, I can see your underwear!"). A man seeing a woman in her underwear — or a woman seeing a man — gets flustered and attracted (and may develop a crush); relatives don't.
+- Anyone seen in an outfit they feel **embarrassed** in (or with underwear showing, unless they're proud of the look) covers up and goes home to put on something else. Swimming is the exception.
+
+### Prior relations
+
+Each resident's panel has a **Prior relations** section: say who on the island is a **relative** (parent, child, sibling, twin, cousin, grandparent, aunt/uncle, niece/nephew, estranged family), a **rival** (friendly, competitive, bitter, nemesis, ex-best friend, one-sided) or in a **relationship** (dating, engaged, married, ex — friendly or bitter, a secret crush, on-and-off). The other resident gets the matching side. It sets where their relationship starts, keeps pulling it back there, and changes what they do together: family chats and hugs (and never dates), siblings prank and bicker, rivals compete in dance-offs and argue, nemeses fight, spouses date and rarely break up, exes are awkward.
+
+### Progression
+
+**Island level** (🏝️ chip in the top bar — click it): earn island XP by solving residents' problems, feeding favourites, giving gifts, stopping fights, rescues, residents levelling up or getting promoted, new residents and every new day. Each level pays a coin bonus and unlocks things — Sewing Kits & Life Rings (Lv 2), Chef & Tailor jobs (3), a bigger daily allowance (4, 8, 12), Police & Paramedic jobs (5), shop discounts (6, 10), the Teacher job (7).
+
+**Resident levels** now matter: every level means higher wages, faster promotions, safer swimming, more toughness in fights, more charm when confessing and a happier baseline. Level 5 residents throw **house parties** and invite friends over; level 8 residents are **island celebrities** with fans asking for autographs.
+
 ### Jobs
 
-Give residents jobs from their panel (or when they ask for one): **Barista ☕, Shop Clerk 🛍️, Doctor 🩺, Gardener 🌷, Fisher 🎣, Performer 🎤, Lifeguard 🛟, Pool Lifeguard 🏊 (condo), Mail Carrier 📮**. Each has a shift, a weekly day off, a wage paid to the island, and promotions with new titles over time. Jobs suit some personalities better than others (★ rating) — residents in a job they dislike get unhappy and may ask to quit. Coworkers bond. On-duty perks: café visitors get happier, 10% off in the shop, much better clinic treatment, the performer entertains the plaza, the fisher brings fish to your inventory, the mail carrier delivers letters that bring residents closer, and more.
+Give residents jobs from their panel (or when they ask for one): **Barista ☕, Shop Clerk 🛍️, Doctor 🩺, Gardener 🌷, Fisher 🎣, Performer 🎤, Lifeguard 🛟, Pool Lifeguard 🏊 (condo), Mail Carrier 📮, Chef 🍳, Tailor 🧵, Police Officer 👮, Paramedic 🚑, Teacher 📚**. Residents **on the clock keep working** — nobody can pull them into a chat or an argument, they snack at work instead of leaving to eat, and early shifts beat sleeping in (you can still set up interactions yourself).
+
+Every job matters: the chef makes café meals fill people up and cooks dishes for your inventory; the tailor mends mishaps at the shop and sews Sewing Kits; police break up fights right away and keep tempers down; paramedics rush to hurt or knocked-out residents and treat them; the teacher's class in the park helps residents level up; the gardener harvests apples. Each has a shift, a weekly day off, a wage paid to the island, and promotions with new titles over time. Jobs suit some personalities better than others (★ rating) — residents in a job they dislike get unhappy and may ask to quit. Coworkers bond. On-duty perks: café visitors get happier, 10% off in the shop, much better clinic treatment, the performer entertains the plaza, the fisher brings fish to your inventory, the mail carrier delivers letters that bring residents closer, and more.
 
 ### Voices & words
 
@@ -96,7 +116,7 @@ Residents talk with a **built-in speech synthesizer** (eSpeak, rendered in a bac
 
 - **Engine & voice:** built-in voice type (7 male, 5 female, croaky, retro, whisper) and accent (American, British, RP, Northern, West Midlands, Scottish), or a system voice.
 - **Pitch** from ×0.25 (giant) to ×4 (chipmunk) on the built-in engine — the synth's own pitch is combined with playback-rate shifting so speed stays about the same. System voices stop at ×2.
-- **Speed** and **volume**.
+- **Speed** and **volume** (Settings also has separate **master, voice, music and ambient & effects** volume sliders).
 - **Intonation:** how much pitch *and* speed move through every sentence — stressed words rise and stretch, small words hurry, phrase ends lengthen, commas get a continuing rise, questions climb and statements fall. Higher settings stress more words, make bigger moves, split speech into shorter phrases and add longer pauses.
 - **Emotion:** how strongly the resident's current mood shapes the line — happy bounces higher and quicker, in love sing-songs, sad sinks, slows and fades, angry punches stressed words, scared trembles and rushes, shy trails off, hurt yelps then strains, smug drawls. With no particular mood it adds lively emphasis.
 - **Verbal tic** ("…, nya!") and how often, **stutter**, and whether they always use speech, babble or stay silent.
@@ -154,7 +174,7 @@ Works best between VRoid models with similar body shapes. Clothing physics (spri
 
 ### Variations
 
-The **👕 Wardrobe** lists every material slot of a resident's model and outfit. For each slot you can swap in a **texture**, apply a **colour tint**, or **hide** it. Save the result as a named **variant** of the character or outfit — any resident using that model can pick the variant. (Tip: export a texture from VRoid Studio, edit it, import it — it keeps the right UV layout.)
+The **👕 Wardrobe** lists every part of a resident's model and outfit — one item per **texture**, so parts that share a material name (VRoid often names socks, bra and panties all "Onepiece_00_CLOTH") are separate items, numbered "(1/3)", "(2/3)"… with a small texture preview. For each item you can swap in a **texture**, apply a **colour tint**, **hide** it, mark it **Thin** (it turns see-through when wet) or **Mishap** (it can go missing in a wardrobe mishap). Save the result as a named **variant** of the character or outfit — any resident using that model can pick the variant. (Tip: export a texture from VRoid Studio, edit it, import it — it keeps the right UV layout.)
 
 ### Textures (.png / .jpg / .webp)
 
