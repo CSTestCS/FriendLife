@@ -186,7 +186,7 @@ export function openCreator(app, res = null, preset = {}) {
       const avatarChanged = JSON.stringify([res.d.look, res.d.outfit, res.d.scale]) !== JSON.stringify([d.look, d.outfit, d.scale]);
       const renamed = res.d.name !== d.name;
       Object.assign(res.d, { voice: d.voice, sayName: d.sayName, name: d.name, gender: d.gender, catchphrase: d.catchphrase, traits: d.traits, favFood: d.favFood, hatedFood: d.hatedFood, look: d.look, outfit: d.outfit, scale: d.scale });
-      if (renamed) sim.island.renameHouse(sim.island.houseOf(res.id), d.name);
+      if (renamed) { sim.island.renameHouse(sim.island.houseOf(res.id), d.name); sim.rooms?.refreshHalls(); }
       if (avatarChanged) {
         toast('Updating look…');
         await sim.rebuildAvatar(res);

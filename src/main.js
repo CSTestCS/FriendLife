@@ -167,10 +167,12 @@ class App {
     this.sim.viewRoom = room;
     st.overrideScene = this.rooms.scene;
     this.rooms.focus(room);
+    // bigger rooms (condo hallway, pool) need the camera further back
+    const k = Math.max(1, room.w / 8, room.d / 6);
     c.target.copy(room.center);
-    st.camera.position.set(room.ox + 1.2, 4.3, 8.6);
+    st.camera.position.set(room.ox + 1.2, 4.3 * k, 8.6 * k);
     c.minDistance = 2.5;
-    c.maxDistance = 13;
+    c.maxDistance = 13 * k;
     c.maxPolarAngle = Math.PI * 0.46;
     c.minAzimuthAngle = -1.15;
     c.maxAzimuthAngle = 1.15;
@@ -210,7 +212,7 @@ class App {
   pickBuilding() {
     const cands = [];
     for (const hs of this.island.houses) if (hs.obj && hs.owner) cands.push([hs.obj, `home:${hs.owner}`]);
-    for (const k of ['cafe', 'shop', 'clinic']) if (this.island.locations[k]?.building) cands.push([this.island.locations[k].building, k]);
+    for (const k of ['cafe', 'shop', 'clinic', 'condo']) if (this.island.locations[k]?.building) cands.push([this.island.locations[k].building, k]);
     const hits = this.raycaster.intersectObjects(cands.map((x) => x[0]), true);
     if (!hits.length) return null;
     let o = hits[0].object;

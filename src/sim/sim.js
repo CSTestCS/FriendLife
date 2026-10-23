@@ -9,7 +9,10 @@ import { FightManager } from './fight.js';
 import { Problems } from './problems.js';
 import { Dialogue } from './dialogue.js';
 import { thinkIndoors } from './roomBrain.js';
+import { SwimManager } from './swim.js';
+import { Condo } from './condo.js';
 import { updateJobs, onDuty, jobOf } from './jobs.js';
+import { preferredOutfit, updateOutfitPerception, selfMoodShift, updateMishaps, causeMishap } from './outfits.js';
 import { INJURIES, line, NAMES, foodById, FOODS, ITEMS } from './data.js';
 import { Emitter, chance, clamp, damp, pick, rand } from '../core/util.js';
 
@@ -46,6 +49,9 @@ export class Sim extends Emitter {
     this.social = new Social(this);
     this.fights = new FightManager(this);
     this.problems = new Problems(this);
+    this.swim = new SwimManager(this);
+    this.condo = new Condo(this);
+    if (this.rooms) this.rooms.condo = this.condo;
     this.dialogue = new Dialogue(this);
     this.snowmen = [];
     this.lastDay = this.day;
@@ -74,16 +80,25 @@ export class Sim extends Emitter {
     const res = new Resident(this, data);
     this.residents.push(res);
     this.residentGroup.add(res.group);
-    const slot = this.island.assignHouse(res.id, data.name, data.houseIndex);
-    data.houseIndex = slot.index;
+    // a house while there are free ones (up to 10), otherwise an apartment in the condo
+    const slot = data.condoUnit == null ? this.island.assignHouse(res.id, data.name, data.houseIndex) : null;
+    if (slot) {
+      data.houseIndex = slot.index;
+      data.condoUnit = null;
+    } else {
+      data.houseIndex = null;
+      this.condo.assign(res, data.condoUnit);
+      if (announce) this.news(`The houses are all taken, so ${data.name} moved into apartment #${this.condo.unitLabel(data.condoUnit)} in the condo! 🏢`, '🏢');
+    }
+    const home = this.homeOf(res);
     if (data.insideState) {
       res.enter(data.insideState.loc, Math.max(1, data.insideState.until - this.clock));
     } else if (data.pos) {
       res.placeAt(data.pos[0], data.pos[1]);
       res.heading = data.pos[2] || 0;
     } else {
-      res.placeAt(slot.door[0], slot.door[1]);
-      res.heading = slot.rot;
+      res.placeAt(home.door[0], home.door[1]);
+      res.heading = home.rot;
     }
     try {
       await res.buildAvatar();
@@ -114,6 +129,11 @@ export class Sim extends Emitter {
     if (index >= (res.d.outfits?.length || 0)) index = -1;
     if (res.d.wearing === index && res.avatar) return;
     res.d.wearing = index;
+    // fresh clothes fix a wardrobe mishap
+    if (res.d.mishap) {
+      res.d.mishap = null;
+      if (res.d.problem?.type === 'mishap') { res.d.problem = null; this.emit('problem', res); }
+    }
     await res.buildAvatar();
     res.refreshAttachments();
     res.setExpression(emotionExpr(res.mood()));
@@ -126,24 +146,23 @@ export class Sim extends Emitter {
     this.emit('resident', res);
   }
 
-  /** Which personal outfit fits the moment (tags: rain, snow, sunny, night, party). */
-  preferredOutfit(res) {
-    const list = res.d.outfits || [];
-    if (!list.length) return -1;
-    const hour = this.minuteOfDay / 60;
-    const w = this.weather;
-    const want = [];
-    if (w.snowing) want.push('snow');
-    if (w.raining) want.push('rain');
-    if (hour >= 19 || hour < 6) want.push('night');
-    if (w.type === 'sunny' || w.type === 'partly') want.push('sunny');
-    if (res.player.action === 'dance') want.push('party');
-    for (const tag of want) {
-      const i = list.findIndex((o) => (o.tags || []).includes(tag));
-      if (i >= 0) return i;
-    }
-    const def = list.findIndex((o) => (o.tags || []).includes('default'));
-    return def;
+  /** Which personal outfit fits the moment (see outfits.js for the conditions). */
+  preferredOutfit(res) { return preferredOutfit(res, this); }
+
+  /** Change into whatever fits the situation right now (if auto-outfits are on). */
+  autoDress(res, { quiet = false, force = false } = {}) {
+    if (!force && (!this.settings.autoOutfits || res.d.autoOutfits === false)) return null;
+    if (!res.d.outfits?.length || !res.avatar) return null;
+    if (res.changing) { res.redress = { quiet, force }; return null; } // check again once this change is done
+    const want = preferredOutfit(res, this);
+    if (want === res.d.wearing) return null;
+    res.changing = true;
+    return this.changeOutfit(res, want, { quiet }).finally(() => {
+      res.changing = false;
+      const again = res.redress;
+      res.redress = null;
+      if (again) this.autoDress(res, again);
+    });
   }
 
   removeResident(res) {
@@ -159,6 +178,7 @@ export class Sim extends Emitter {
     this.residentGroup.remove(res.group);
     this.residents = this.residents.filter((r) => r !== res);
     this.island.releaseHouse(res.id);
+    this.condo.release(res);
     for (const r of this.residents) {
       delete r.d.relationships[res.id];
       if (r.d.problem?.other === res.id) r.d.problem = null;
@@ -167,6 +187,9 @@ export class Sim extends Emitter {
     this.news(`${res.name} moved away from the island. 👋`, '🧳');
     this.emit('residents');
   }
+
+  /** Move a new random resident in (used by tests / quick fill). */
+  addRandomResident(opts) { return this.addResident(newResidentData(this.randomName()), opts); }
 
   randomName() {
     const used = new Set(this.residents.map((r) => r.name));
@@ -193,12 +216,25 @@ export class Sim extends Emitter {
     else if (!res.inside && this.viewRoom) this.emit('viewRoom', null);
   }
 
+  /** Where a resident lives: their house slot, or the condo entrance. {door:[x,z], rot, condo} */
+  homeOf(res) {
+    const h = this.island.houseOf(res.id);
+    if (h) return h;
+    const c = this.locations.condo;
+    if (this.condo.unitOf(res.id) != null && c) return { door: c.door, rot: c.rotY ?? 0, condo: true };
+    return null;
+  }
+
   placeName(loc) {
     if (!loc) return 'Outside';
     if (loc.startsWith('home:')) {
       const owner = this.byId(loc.slice(5));
+      if (owner && this.condo.unitOf(owner.id) != null) return `${owner.name}'s apartment`;
       return owner ? `${owner.name}'s house` : 'home';
     }
+    if (loc.startsWith('hall:')) return `Condo floor ${loc.slice(5)}`;
+    if (loc === 'condo') return 'Condo lobby';
+    if (loc === 'condoPool') return 'Condo pool';
     return this.locations[loc]?.label || loc;
   }
 
@@ -394,8 +430,12 @@ export class Sim extends Emitter {
 
   locationDoor(loc, res) {
     if (!loc) return null;
+    // rooms inside the condo are reached through its front door
+    const top = this.rooms?.chain(loc)?.[0];
+    if (top && top !== loc) return this.locationDoor(top, res);
     if (loc.startsWith('home:')) {
-      const h = this.island.houseOf(loc.slice(5));
+      const owner = this.byId(loc.slice(5));
+      const h = owner ? this.homeOf(owner) : null;
       return h ? [h.door[0], h.door[1], h.rot] : null;
     }
     const l = this.locations[loc];
@@ -488,6 +528,7 @@ export class Sim extends Emitter {
     }
     this.social.update(dt);
     this.fights.update(dt);
+    this.swim.update(dt);
     for (const r of this.residents) r.update(dt, gameMin);
     this.separate();
 
@@ -517,6 +558,8 @@ export class Sim extends Emitter {
       n.social = clamp(n.social - min * 0.05 * (0.5 + r.t.sociability), 0, 100);
 
       // wetness: rain soaks you unless indoors or carrying an umbrella
+      if (r.inWater) d.wetness = 1;
+      if (d.swimWet && d.wetness < 0.2) d.swimWet = false;
       const exposed = !r.inside && (w.raining || w.snowing);
       if (exposed) {
         const rate = (w.p.rain * 0.06 + w.p.snow * 0.015) * (d.hasUmbrella && !r.engaged?.isFight && !r.ko ? 0.12 : 1);
@@ -526,7 +569,7 @@ export class Sim extends Emitter {
         const dry = r.inside ? 0.025 : w.type === 'sunny' ? 0.012 : 0.005;
         d.wetness = clamp(d.wetness - dry * min);
       }
-      if (d.wetness > 0.7) {
+      if (d.wetness > 0.7 && !d.swimWet) {
         d.soakedMinutes += min;
         if (d.soakedMinutes > 90 && chance(0.002 * min) && !d.injuries.some((i) => i.type === 'cold')) {
           r.addInjury('cold');
@@ -551,7 +594,8 @@ export class Sim extends Emitter {
 
       // happiness drifts toward a target based on how life is going
       let target = 50 + (n.hunger - 50) * 0.18 + (n.fun - 50) * 0.18 + (n.social - 50) * 0.15 + (n.energy - 50) * 0.1;
-      target -= r.painLevel * 0.9 + d.wetness * 14;
+      target -= r.painLevel * 0.9 + d.wetness * 14 * (d.swimWet ? 0.1 : 1);
+      target += selfMoodShift(r);
       if (r.partnerId()) target += 8;
       const emo = r.mood();
       if (emo === 'love') target += 15;
@@ -564,18 +608,20 @@ export class Sim extends Emitter {
       // keep faces in sync with mood when idle
       if (!r.engaged && !r.ko && r.avatar && chance(0.02 * min)) r.setExpression(emotionExpr(r.mood()));
     }
-    // residents change into weather/time appropriate personal outfits on their own
+    // residents change into outfits that fit the situation on their own
     this.outfitTimer = (this.outfitTimer || 0) - min;
     if (this.outfitTimer <= 0 && this.settings.autoOutfits) {
-      this.outfitTimer = 20;
+      this.outfitTimer = 6;
       for (const r of this.residents) {
-        if (!r.d.autoOutfits || !r.d.outfits?.length || r.engaged || r.ko || r.changing) continue;
-        const want = this.preferredOutfit(r);
-        if (want !== r.d.wearing) {
-          r.changing = true;
-          this.changeOutfit(r, want).finally(() => { r.changing = false; });
-        }
+        if (r.engaged || r.ko || r.moving || r.seat || (r.inside && !r.room)) continue;
+        this.autoDress(r);
       }
+    }
+    this.swim.perMinute(min);
+    updateOutfitPerception(this, min);
+    updateMishaps(this, min);
+    for (const r of this.residents) {
+      if (!r.inside && !r.engaged && !r.inWater && !r.d.mishap && chance(0.00008 * min)) causeMishap(this, r, chance(0.6) ? 'seam' : 'stain');
     }
     // jobs: wages, promotions, perks
     updateJobs(this, min);

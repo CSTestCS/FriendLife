@@ -120,6 +120,7 @@ export class AudioEngine {
 
   whoosh() { this._burst({ dur: 0.18, freq: 1500, type: 'bandpass', gain: 0.18, q: 2, rate: 1.5 }); }
   thud() { this._tone({ freq: 90, dur: 0.3, gain: 0.6, slide: -40 }); this._burst({ dur: 0.3, freq: 300, gain: 0.4 }); }
+  splash() { this._burst({ dur: 0.35, freq: 900, type: 'lowpass', gain: 0.3, q: 0.7, rate: 1 }); }
   pop() { this._tone({ freq: 660, dur: 0.08, type: 'triangle', gain: 0.15, slide: 300 }); }
   blip() { this._tone({ freq: 520, dur: 0.06, type: 'square', gain: 0.05 }); }
   chime() { [784, 988, 1175].forEach((f, i) => this._tone({ freq: f, dur: 0.35, type: 'triangle', gain: 0.12, delay: i * 0.09 })); }

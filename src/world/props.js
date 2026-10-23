@@ -118,6 +118,54 @@ export function makeShop({ name = 'SHOP', wall = '#e9f1f7', roof = '#4b7bd1', aw
   return g;
 }
 
+/** Condo tower with an entrance canopy and a glass pool annex on its right side. */
+export function makeCondo() {
+  const g = new THREE.Group();
+  const wall = stdMat('#e9e2f2', { roughness: 0.85, porosity: 0.3 });
+  const band = stdMat('#7a6aa8', { roughness: 0.7 });
+  const trim = stdMat('#ffffff', { roughness: 0.6 });
+  const floors = 4;
+  const fh = 2.3;
+  g.add(box(7, floors * fh, 5.6, wall, 0, (floors * fh) / 2, 0));
+  g.add(box(7.4, 0.4, 6, band, 0, floors * fh + 0.2, 0));
+  for (let f = 0; f < floors; f++) {
+    const y = f * fh + 1.35;
+    if (f > 0) g.add(box(7.1, 0.12, 5.7, band, 0, f * fh, 0));
+    for (const x of [-2.4, -0.8, 0.8, 2.4]) {
+      if (f === 0 && Math.abs(x) < 1) continue;
+      g.add(box(1.0, 1.0, 0.06, nightMaterials.window, x, y, 2.82));
+      g.add(box(1.1, 0.08, 0.12, trim, x, y - 0.55, 2.86));
+      g.add(box(1.0, 1.0, 0.06, nightMaterials.window, x, y, -2.82));
+    }
+    for (const z of [-1.4, 1.4]) {
+      g.add(box(0.06, 1.0, 1.0, nightMaterials.window, -3.52, y, z));
+      // little balconies on the left side
+      if (f > 0) g.add(box(0.5, 0.08, 1.3, trim, -3.75, y - 0.55, z), box(0.04, 0.5, 1.3, trim, -3.98, y - 0.3, z));
+    }
+  }
+  // entrance
+  g.add(box(1.6, 2.1, 0.08, stdMat('#9fd4ff', { roughness: 0.1, metalness: 0.2 }), 0, 1.05, 2.84));
+  g.add(box(0.06, 2.1, 0.1, trim, 0, 1.05, 2.9));
+  g.add(box(2.6, 0.15, 1.4, band, 0, 2.5, 3.5));
+  for (const x of [-1.2, 1.2]) g.add(cyl(0.05, 0.05, 2.5, trim, 8, x, 1.25, 4.1));
+  g.add(box(2.8, 0.12, 1.6, stdMat('#b9b2a6', { roughness: 0.9 }), 0, 0.06, 3.6));
+  const s = sign('🏢 CONDO', 3.0);
+  s.position.set(0, 2.95, 2.84);
+  g.add(s);
+  // pool annex (glass roof, blue glow)
+  const annex = new THREE.Group();
+  annex.add(box(4.2, 2.4, 4.6, stdMat('#f4f1ea', { roughness: 0.8, porosity: 0.3 }), 0, 1.2, 0));
+  annex.add(box(4.0, 0.08, 4.4, stdMat('#bfe8ff', { roughness: 0.05, metalness: 0.1 }), 0, 2.45, 0));
+  annex.add(box(3.6, 1.0, 0.06, stdMat('#5ec4f2', { roughness: 0.1, emissive: '#2a8fc4' }), 0, 1.4, 2.32));
+  const ps = sign('🏊 POOL', 2.0);
+  ps.position.set(0, 2.15, 2.33);
+  annex.add(ps);
+  annex.position.set(5.6, 0, 0.3);
+  g.add(annex);
+  shadowAll(g);
+  return g;
+}
+
 export function makeClinic() {
   const g = makeShop({ name: '✚ CLINIC', wall: '#ffffff', roof: '#e05b5b', awning: ['#ffffff', '#e05b5b'] });
   const cross = new THREE.Group();

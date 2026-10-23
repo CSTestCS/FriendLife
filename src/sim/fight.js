@@ -7,6 +7,7 @@
 // sprains, concussions, broken arms). The aftermath leaves grudges, news
 // headlines and problems for the player to sort out.
 
+import { fightPowerMul, causeMishap } from './outfits.js';
 import * as THREE from 'three';
 import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, INJURIES } from './data.js';
@@ -117,7 +118,7 @@ export class Fight {
       res.say(pick(['I\'m outta here!', 'Waaah!', 'Leave me alone!']), { emoji: '💨' });
       res.setExpression({ sad: 1, surprised: 0.4 });
       if (res.inside) res.exit(); // run out of the building first
-      const home = sim.island.houseOf(res.id);
+      const home = sim.homeOf(res);
       if (home) res.setPlan([{ kind: 'walk', x: home.door[0], z: home.door[1], run: true }, { kind: 'enter', loc: `home:${res.id}`, minutes: rand(60, 120) }]);
       this.events.push(`${res.name} ran away`);
       return;
@@ -199,7 +200,7 @@ export class Fight {
       fx.text(hitPos.clone().add(new THREE.Vector3(0, 0.3, 0)), 'MISS', '#bfe6ff', 0.6);
       return;
     }
-    let dmg = rand(mv.dmg[0], mv.dmg[1]) * (0.85 + att.t.confidence * 0.3) * (1 - att.painLevel / 120);
+    let dmg = rand(mv.dmg[0], mv.dmg[1]) * (0.85 + att.t.confidence * 0.3) * (1 - att.painLevel / 120) * fightPowerMul(att);
     if (roll < dodge + block && type !== 'tackle') {
       dmg *= 0.25;
       def.play('block', { restart: true, fade: 0.05 });
@@ -397,6 +398,12 @@ export class Fight {
       r.addMemory(`Lost a fight against ${winners.map((w) => w.name).join(' & ')}`);
     }
     for (const w of winners) w.addMemory(`Won a fight against ${losers.map((l) => l.name).join(' & ')}`);
+    // fights are rough on clothes
+    for (const res of all) {
+      const st = this.f.get(res);
+      if (st.fled || how === 'player') continue;
+      if (chance(st.ko ? 0.45 : st.down || losers.includes(res) ? 0.3 : 0.15)) setTimeout(() => { if (sim.residents.includes(res)) causeMishap(sim, res, chance(0.8) ? 'torn' : 'seam'); }, 2500);
+    }
     // spectators go back to life
     for (const w of this.spectators) if (!w.engaged) { w.clearPlan(); w.play('idle'); w.setExpression({}); }
     // headline

@@ -94,12 +94,12 @@ export class Effects {
     }
   }
 
-  splash(pos, n = 10) {
+  splash(pos, n = 10, parent = this.group) {
     for (let i = 0; i < n; i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.dot, color: '#bfe0ff', transparent: true, depthWrite: false, opacity: 0.8 }));
       s.position.copy(pos);
       const v = new THREE.Vector3(rand(-1, 1), rand(1, 2.5), rand(-1, 1));
-      this.group.add(s);
+      parent.add(s);
       this.items.push({ obj: s, life: 0.7, max: 0.7, kind: 'drop', size: 0.08, vel: v, gravity: true });
     }
   }
@@ -126,7 +126,7 @@ export class Effects {
         it.obj.scale.setScalar(it.size * (0.4 + k));
         it.obj.material.opacity = k;
       }
-      if (it.life <= 0) { this.group.remove(it.obj); it.obj.material.dispose(); }
+      if (it.life <= 0) { it.obj.removeFromParent(); it.obj.material.dispose(); }
     }
     this.items = this.items.filter((it) => it.life > 0);
   }

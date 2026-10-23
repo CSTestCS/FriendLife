@@ -65,9 +65,30 @@ Every house — plus the café, shop and clinic — has its own **room instance*
 
 Look inside by **clicking a building**, the **🏠 Rooms** button (`H`), a resident's **👀 Look inside / 🏡 Their home** button, or just follow a selected resident — the camera goes in and out of buildings with them. **🎨 Decorate** any room: wall and floor colours or your own textures as wallpaper/flooring, furniture colour, and decorations (plants, lamps, piano, arcade machine, aquarium, giant teddy, guitar, trophy shelf). The window shows the weather outside, and lamps come on at night.
 
+### The condo
+
+The island has room for **10 houses**. When an 11th resident moves in, a **🏢 condo tower** appears behind the houses, and every later resident gets an apartment there (four per floor, as many floors as needed). Residents really walk through it: in the front door to the **lobby** (sofa, mailboxes), up the lift to **their floor's hallway**, and in through their own door (with their name on it). Neighbours bump into each other in the hallways and stop for a chat, hang out there, and visit each other's apartments. The condo also has an **indoor pool** that anyone can use — it's especially popular when it rains — with its own **Pool Lifeguard** job. Click the condo or use **🏠 Rooms** to look into the lobby, the pool, each floor and each apartment.
+
+### Swimming & lifeguards
+
+Residents go **swimming** at the beach (and in the condo pool): they change into their swimwear, stretch, wade in, swim the front crawl, tread water and float on their backs — and come out with the wet sheen. Swimming isn't risk free: cramps, tiredness, a full stomach, injuries, rain and especially storms can leave a swimmer **struggling** (🆘). Then:
+
+- an **on-duty lifeguard** (beach 🛟 / condo pool 🏊) reacts at once, swims out and tows them back — the swimmer is hugely grateful and the island tips the lifeguard;
+- otherwise a **brave bystander** might go in after a few seconds;
+- you can **🛟 throw a Life Ring** (shop item, reusable) or **shout for help** from the resident's panel;
+- if nobody comes, the waves eventually wash them ashore — with swallowed water, a dizzy spell and a fear of the water for days (and a news headline saying the island needs a lifeguard).
+
+Residents swim more happily when a lifeguard is on duty, and lifeguards stay at their tower watching the water, call out warnings and get promotion credit for rescues.
+
+### Daily routines & wardrobe mishaps
+
+At **bedtime** residents brush their teeth, change into whatever they sleep in, maybe read a bit, then go to bed. In the **morning** they wake up (bright-eyed or groggy), stretch or yawn, get dressed, have breakfast and head out.
+
+There's always a small chance of a **wardrobe mishap**: clothes **torn in a fight** (the most common), **forgetting to get dressed** (out in their pyjamas — or barefoot if they have no sleepwear), a **split seam** while exercising, a **coffee stain** at the café, a shirt **inside out**. Some aren't noticed right away; once they are, the resident gets embarrassed, others react, and they ask you what to do: go home and change, fix it with a **🧵 Sewing Kit**, or **own it** 😎. Changing into another outfit also fixes it.
+
 ### Jobs
 
-Give residents jobs from their panel (or when they ask for one): **Barista ☕, Shop Clerk 🛍️, Doctor 🩺, Gardener 🌷, Fisher 🎣, Performer 🎤, Lifeguard 🛟, Mail Carrier 📮**. Each has a shift, a weekly day off, a wage paid to the island, and promotions with new titles over time. Jobs suit some personalities better than others (★ rating) — residents in a job they dislike get unhappy and may ask to quit. Coworkers bond. On-duty perks: café visitors get happier, 10% off in the shop, much better clinic treatment, the performer entertains the plaza, the fisher brings fish to your inventory, the mail carrier delivers letters that bring residents closer, and more.
+Give residents jobs from their panel (or when they ask for one): **Barista ☕, Shop Clerk 🛍️, Doctor 🩺, Gardener 🌷, Fisher 🎣, Performer 🎤, Lifeguard 🛟, Pool Lifeguard 🏊 (condo), Mail Carrier 📮**. Each has a shift, a weekly day off, a wage paid to the island, and promotions with new titles over time. Jobs suit some personalities better than others (★ rating) — residents in a job they dislike get unhappy and may ask to quit. Coworkers bond. On-duty perks: café visitors get happier, 10% off in the shop, much better clinic treatment, the performer entertains the plaza, the fisher brings fish to your inventory, the mail carrier delivers letters that bring residents closer, and more.
 
 ### Voices & words
 
@@ -119,7 +140,9 @@ Every resident has a **Closet** (side panel). Add outfits that belong only to th
 - **📦 Use a model from the Library** — any character model, optionally with a clothing overlay.
 - **⧉ Copy current look** — then restyle it in the 👕 Wardrobe (texture swaps, tints, hidden parts are stored per outfit).
 
-Tag outfits with **Everyday / Sunny / Rain / Snow / Night / Dancing** and residents change into them automatically (with a sparkle) when the weather or time fits. Switching back to a recently worn outfit is instant.
+**Wear automatically when…** tag outfits with situations: **Swimming, Sleeping, Working, Exercising, Dancing, On a date, Visiting someone, At home, Snow, Rain, Evening, Morning, Sunny, Out and about, Everyday**. Activities come first (swimming, sleeping, working, exercising, dancing, a date), then being at home or visiting, then weather and time of day, then out and about, then everyday; if several outfits fit at that level — say one for rain and one for the evening on a rainy evening — the resident picks one at random (and keeps it while the situation lasts). Residents change right when an activity starts — into swimwear at the beach, pyjamas at bedtime, the work outfit for their shift. Once a resident has more than one outfit, the **main look** gets the same settings (✏ next to it). Switching back to a recently worn outfit is instant.
+
+**How it's perceived:** for each outfit (and the main look), set how the resident **feels** wearing it and how **everyone else sees** it — cute, elegant, sexy, cool, powerful, comfortable, sporty, professional, trendy, silly, scary, sloppy, embarrassing. Feelings affect their mood and confidence (feeling powerful hits harder in fights; feeling embarrassed makes them shy and unhappy) and they comment on it. Others react when they see it: compliments, flustered crushes, "nice fit!", laughing and teasing, keeping their distance from someone powerful or scary — and it shifts what they choose to do with each other (more compliments, more teasing, fewer fights). The two can disagree: if they think it's sexy and everyone thinks it's embarrassing, being laughed at hurts.
 
 When a resident says *"I'm tired of my look"*, anything new counts: adding an outfit to their closet (any of the three ways), wearing a different closet outfit, restyling them in the 👕 Wardrobe, saving a variant, or changing their model in ✏️ Edit.
 
@@ -168,14 +191,15 @@ In the Library you can **replace any built-in action** (idle, walk, run, dance, 
 electron/        desktop shell (window, mods folder, samples)
 src/core/        library (IndexedDB + mods), helpers
 src/engine/      renderer/sky/lighting, weather & particles, wet/snow materials, audio, effects
-src/world/       island layout, buildings & props
+src/world/       island layout, buildings & props, room instances (houses, café, shop, clinic, condo)
 src/characters/  VRM + doll avatars, outfits, animation system, built-in animations
-src/sim/         residents, brain (daily routine), social interactions, fights, problems, data
+src/sim/         residents, brain (daily routine), room brain, social, fights, problems, jobs,
+                 outfits (conditions, perception, mishaps), swimming & rescues, condo
 src/ui/          HUD, panels, library, wardrobe, creator, studio, shop/news/settings/build
 scripts/         build, sample generator, icon, headless tests
 samples/         sample VRM character, VRM outfit and .vrma animation (generated, CC0)
 ```
 
-Headless tests (need Playwright + Chromium): `node scripts/smoke.cjs`, `scripts/vrm-test.cjs`, `scripts/ui-test.cjs`, `scripts/sim-test.cjs` (simulates several days and prints the island news).
+Headless tests (need Playwright + Chromium): `node scripts/smoke.cjs`, `scripts/vrm-test.cjs`, `scripts/ui-test.cjs`, `scripts/sim-test.cjs` (simulates several days and prints the island news), `scripts/rooms-test.cjs`, `scripts/voice-test.cjs`, `scripts/life-test.cjs` (swimming & rescues, outfits & perception, mishaps, routines, the condo).
 
 Built with [three.js](https://threejs.org) and [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) (both MIT), packaged with Electron.

@@ -5,10 +5,17 @@
 // rains, pyjamas at night, party outfit when dancing…).
 import { h, openModal, toast, pickFiles, prompt, confirmBox, esc } from './dom.js';
 import { select } from './creator.js';
+import { OUTFIT_TAGS, PERCEPTIONS, outfitMeta } from '../sim/outfits.js';
 
-export const OUTFIT_TAGS = [
-  ['default', '⭐ Everyday'], ['sunny', '☀️ Sunny'], ['rain', '🌧️ Rain'], ['snow', '❄️ Snow'], ['night', '🌙 Night'], ['party', '🎉 Dancing'],
-];
+export { OUTFIT_TAGS };
+
+const tagIcons = (meta) => (meta?.tags || []).map((t) => OUTFIT_TAGS.find((x) => x[0] === t)?.[1].split(' ')[0]).join('');
+const percIcons = (meta) => {
+  const p = meta?.perception || {};
+  const s = (p.self || []).map((t) => PERCEPTIONS[t]?.icon).join('');
+  const o = (p.others || []).map((t) => PERCEPTIONS[t]?.icon).join('');
+  return s || o ? ` · feels ${s || '–'} / looks ${o || '–'}` : '';
+};
 
 export function closetSection(app, res, rerender) {
   const sim = app.sim;
@@ -22,16 +29,17 @@ export function closetSection(app, res, rerender) {
       h('span', {}, h('b', {}, label), sub ? h('span', { class: 'hint' }, ` ${sub}`) : null),
       h('span', { class: 'row', style: { gap: '4px' } },
         wearing ? h('span', { class: 'tag good' }, 'wearing') : h('button', { class: 'small primary', onclick: async () => { toast(`Changing ${res.name}…`); await sim.changeOutfit(res, idx); sim.problems.newLook(res); rerender(); } }, 'Wear'),
-        idx >= 0 ? h('button', { class: 'small', title: 'Edit', onclick: () => editOutfit(app, res, idx, rerender) }, '✏') : null,
+        idx >= 0 || outfits.length ? h('button', { class: 'small', title: 'Edit settings', onclick: () => editOutfit(app, res, idx, rerender) }, '✏') : null,
       ));
   };
   const mainName = res.d.look.kind === 'vrm' ? lib.displayName(res.d.look.assetId) : 'Built-in doll';
-  wrap.append(row('Main look', mainName, -1));
+  const main = outfitMeta(res, -1);
+  wrap.append(row(main.name || 'Main look', `${mainName} ${tagIcons(main)}${percIcons(main)}`, -1));
   outfits.forEach((o, i) => {
     const model = o.look.kind === 'vrm' ? lib.displayName(o.look.assetId) : 'doll';
-    const tags = (o.tags || []).map((t) => OUTFIT_TAGS.find((x) => x[0] === t)?.[1].split(' ')[0]).join('');
-    wrap.append(row(o.name, `${model} ${tags}`, i));
+    wrap.append(row(o.name, `${model} ${tagIcons(o)}${percIcons(o)}`, i));
   });
+  if (res.d.mishap) wrap.append(h('div', { class: 'hint' }, `👗 Mishap: ${res.d.mishap.type}${res.d.mishap.owned ? ' (owning it 😎)' : ''}`));
   wrap.append(h('div', { class: 'row', style: { marginTop: '6px' } },
     h('button', { class: 'small blue', onclick: () => addOutfit(app, res, rerender) }, '＋ Add outfit'),
     h('label', { class: 'tag', title: 'Change outfits automatically based on weather/time tags' }, h('input', { type: 'checkbox', checked: res.d.autoOutfits !== false, onchange: (e) => { res.d.autoOutfits = e.target.checked; } }), ' Auto-change'),
@@ -105,24 +113,43 @@ function pickFromLibrary(app, res, rerender) {
 function editOutfit(app, res, idx, rerender) {
   const sim = app.sim;
   const lib = sim.library;
-  const o = res.d.outfits[idx];
+  const isMain = idx < 0;
+  const o = outfitMeta(res, idx);
+  o.perception ||= { self: [], others: [] };
   const m = openModal({
-    title: `Outfit: ${o.name}`,
+    title: isMain ? `Main look: ${res.name}` : `Outfit: ${o.name}`,
+    wide: true,
     body: (b) => {
-      b.append(h('div', { class: 'field' }, h('label', {}, 'Name'), h('input', { type: 'text', value: o.name, oninput: (e) => { o.name = e.target.value || o.name; } })));
-      if (o.look.kind === 'vrm') {
-        const vars = lib.variants(o.look.assetId);
-        b.append(h('div', { class: 'field' }, h('label', {}, `Model: ${lib.displayName(o.look.assetId)} — variant`),
-          select([['', 'Default'], ...vars.map((v) => [v.id, v.name])], o.look.variantId || '', (v) => { o.look.variantId = v || null; })));
+      if (!isMain) {
+        b.append(h('div', { class: 'field' }, h('label', {}, 'Name'), h('input', { type: 'text', value: o.name, oninput: (e) => { o.name = e.target.value || o.name; } })));
+        if (o.look.kind === 'vrm') {
+          const vars = lib.variants(o.look.assetId);
+          b.append(h('div', { class: 'field' }, h('label', {}, `Model: ${lib.displayName(o.look.assetId)} — variant`),
+            select([['', 'Default'], ...vars.map((v) => [v.id, v.name])], o.look.variantId || '', (v) => { o.look.variantId = v || null; })));
+        }
+      } else {
+        b.append(h('p', { class: 'hint' }, 'Settings for the resident\'s main look (change the look itself in ✏️ Edit or 👕 Wardrobe).'));
       }
-      const tags = h('div', { class: 'tagrow' });
-      for (const [k, label] of OUTFIT_TAGS) {
-        tags.append(h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: (o.tags || []).includes(k), onchange: (e) => { o.tags = (o.tags || []).filter((t) => t !== k); if (e.target.checked) o.tags.push(k); } }), ` ${label}`));
-      }
-      b.append(h('div', { class: 'field' }, h('label', {}, 'Wear automatically when…'), tags));
+      const checks = (list, arr, set) => {
+        const row = h('div', { class: 'tagrow' });
+        for (const [k, label] of list) {
+          row.append(h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: arr().includes(k), onchange: (e) => { const next = arr().filter((t) => t !== k); if (e.target.checked) next.push(k); set(next); } }), ` ${label}`));
+        }
+        return row;
+      };
+      o.tags ||= [];
+      b.append(h('div', { class: 'field' }, h('label', {}, 'Wear automatically when…'),
+        checks(OUTFIT_TAGS, () => o.tags, (v) => { o.tags = v; }),
+        h('div', { class: 'hint' }, 'Activities (swimming, sleeping, working…) come first, then being at home / visiting, then weather & time of day, then out and about, then everyday. If several outfits fit at that level (say one for rain and one for the evening), they pick one at random.')));
+      const percList = Object.entries(PERCEPTIONS).map(([k, p]) => [k, `${p.icon} ${p.label}`]);
+      b.append(
+        h('div', { class: 'field' }, h('label', {}, `How ${res.name} feels wearing it`), checks(percList, () => o.perception.self, (v) => { o.perception.self = v; })),
+        h('div', { class: 'field' }, h('label', {}, 'How everyone else sees it'), checks(percList, () => o.perception.others, (v) => { o.perception.others = v; })),
+        h('div', { class: 'hint' }, 'Feelings change their mood and confidence (powerful hits harder in fights, embarrassing makes them shy). Others react when they see it — compliments, flustered crushes, laughing, keeping their distance… The two can disagree!'),
+      );
     },
-    foot: (f) => f.append(
-      h('button', { class: 'danger', onclick: async () => {
+    foot: (f) => f.append(...[
+      isMain ? null : h('button', { class: 'danger', onclick: async () => {
         if (!(await confirmBox(`Remove “${o.name}” from ${res.name}'s closet?`, 'Remove'))) return;
         res.d.outfits.splice(idx, 1);
         if (res.d.wearing === idx) await sim.changeOutfit(res, -1, { quiet: true });
@@ -132,9 +159,9 @@ function editOutfit(app, res, idx, rerender) {
       } }, '🗑 Remove'),
       h('button', { class: 'primary', onclick: async () => {
         m.close();
-        if (res.d.wearing === idx) { res.avatarCache?.clear(); await res.buildAvatar(); }
+        if (!isMain && res.d.wearing === idx) { res.avatarCache?.clear(); await res.buildAvatar(); }
         rerender();
       } }, 'Done'),
-    ),
+    ].filter(Boolean)),
   });
 }

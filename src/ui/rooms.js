@@ -41,15 +41,15 @@ export class RoomBar {
 
 export function openRoomList(app) {
   const sim = app.sim;
-  const keys = ['cafe', 'shop', 'clinic', ...sim.residents.map((r) => `home:${r.id}`)];
+  const condoKeys = sim.condo.active ? ['condo', 'condoPool', ...Array.from({ length: sim.condo.floors }, (_, i) => `hall:${i + 1}`)] : [];
+  const keys = ['cafe', 'shop', 'clinic', ...condoKeys, ...sim.residents.map((r) => `home:${r.id}`)];
   const m = openModal({
     title: '🚪 Rooms',
     body: (b) => {
       for (const key of keys) {
         const people = sim.residents.filter((r) => r.inside === key);
-        const owner = key.startsWith('home:') ? sim.byId(key.slice(5)) : null;
-        const label = owner ? `${owner.name}'s house` : ROOM_LABELS[key];
-        const icon = { cafe: '☕', shop: '👕', clinic: '🏥' }[key] || '🏠';
+        const label = sim.placeName(key);
+        const icon = { cafe: '☕', shop: '👕', clinic: '🏥', condo: '🏢', condoPool: '🏊' }[key] || (key.startsWith('hall:') ? '🚪' : sim.condo.unitOf(key.slice(5)) != null ? '🏢' : '🏠');
         b.append(h('div', { class: 'asset-row' }, h('span', { style: { fontSize: '22px' } }, icon), h('span', { class: 'nm' }, label),
           h('span', { class: 'grow hint' }, people.length ? people.map((p) => `${p.name}${p.working ? ' (working)' : ''}`).join(', ') : 'empty'),
           h('button', { class: 'small primary', onclick: () => { m.close(); app.viewRoom(key); } }, 'Look inside'),
@@ -145,10 +145,11 @@ export function openJobPicker(app, res, onPick) {
         const j = JOBS[id];
         const fit = id === 'none' ? null : jobFit(j, res.t);
         const coworkers = sim.residents.filter((r) => r !== res && r.d.job?.id === id).map((r) => r.name);
+        const locked = j.needs === 'condo' && !sim.condo.active;
         grid.append(h('div', { class: 'card' },
           h('div', { class: 'row' }, h('b', { style: { fontSize: '16px' } }, `${j.icon} ${j.label}`),
             fit !== null ? h('span', { class: 'tag', title: 'How well it suits their personality' }, `${'★'.repeat(Math.round(fit * 5))}${'☆'.repeat(5 - Math.round(fit * 5))}`) : null,
-            h('button', { class: `small ${res.d.job?.id === id ? 'active' : 'primary'}`, style: { marginLeft: 'auto' }, onclick: () => { m.close(); onPick(id); } }, res.d.job?.id === id || (!res.d.job && id === 'none') ? 'Current' : 'Choose')),
+            h('button', { class: `small ${res.d.job?.id === id ? 'active' : 'primary'}`, disabled: locked, title: locked ? 'Opens when the condo is built (more than 10 residents)' : '', style: { marginLeft: 'auto' }, onclick: () => { m.close(); onPick(id); } }, locked ? '🔒 Needs condo' : res.d.job?.id === id || (!res.d.job && id === 'none') ? 'Current' : 'Choose')),
           id === 'none' ? h('div', { class: 'hint' }, 'No work, no pay — more free time.') : h('div', { class: 'hint' }, `${ROOM_LABELS[j.place] || j.place} · ${j.start}:00–${j.end}:00 · ${j.wage} 🪙/h${j.rainOff ? ' · off when it rains' : ''}`),
           j.perk ? h('div', { class: 'hint' }, `Perk: ${j.perk}`) : null,
           coworkers.length ? h('div', { class: 'hint' }, `Coworkers: ${coworkers.join(', ')}`) : null));

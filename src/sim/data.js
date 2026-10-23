@@ -27,6 +27,8 @@ export const ITEMS = [
   { id: 'umbrella', name: 'Umbrella', icon: '☂️', price: 80, desc: 'Give to a resident. They keep it and stay dry in the rain.' },
   { id: 'gift', name: 'Gift Box', icon: '🎁', price: 50, desc: 'A present. Great for cheering up or making up after a fight.' },
   { id: 'medicine', name: 'Cold Medicine', icon: '💊', price: 35, desc: 'Cures a cold.' },
+  { id: 'sewkit', name: 'Sewing Kit', icon: '🧵', price: 25, desc: 'Fixes torn or split clothes on the spot.' },
+  { id: 'lifering', name: 'Life Ring', icon: '🛟', price: 40, desc: 'Throw it to a resident in trouble in the water. Reusable.' },
 ];
 export const itemById = (id) => ITEMS.find((i) => i.id === id);
 
@@ -38,6 +40,7 @@ export const INJURIES = {
   sprain: { label: 'Sprained Ankle', icon: '🦶', severity: 2, heal: 30 * 60, pain: 12, effect: 'limp' },
   concussion: { label: 'Concussion', icon: '💫', severity: 2, heal: 16 * 60, pain: 10, effect: 'dizzy', visual: 'headBandage' },
   brokenArm: { label: 'Broken Arm', icon: '🦴', severity: 3, heal: 72 * 60, pain: 18, effect: 'sling', visual: 'sling' },
+  waterlogged: { label: 'Swallowed Water', icon: '🌊', severity: 2, heal: 6 * 60, pain: 9, effect: 'dizzy' },
   cold: { label: 'Cold', icon: '🤧', severity: 1, heal: 20 * 60, pain: 6, effect: 'sneeze', illness: true },
 };
 

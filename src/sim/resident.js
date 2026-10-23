@@ -10,6 +10,7 @@ import { makeUmbrella, makeHeadBandage, makePlaster, makeSling, makeDizzyStars }
 import { INJURIES, FOODS, CATCHPHRASES, line, DOLL_PALETTES } from './data.js';
 import { angleDamp, clamp, pick, rand, uid, chance, damp } from '../core/util.js';
 import { defaultVoice, normVoice, stylizeLine } from '../engine/voice.js';
+import { mishapLook } from './outfits.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -18,7 +19,9 @@ const UP = new THREE.Vector3(0, 1, 0);
 export const RESIDENT_SCALE = 1.3;
 const _e = new THREE.Euler();
 // poses where the feet are not standing on the ground: no foot IK / head tracking
-const NO_IK = new Set(['sit', 'sitGround', 'lieDown', 'sleep', 'knockdown', 'getUp', 'tackle', 'eat']);
+const SWIM_ANIM = { walk: 'swim', walkHappy: 'swim', walkSad: 'swim', run: 'swim', limp: 'swim', idle: 'tread', idleLook: 'tread', wait: 'tread' };
+const WATER_OK = new Set(['swim', 'tread', 'float', 'struggle']);
+const NO_IK = new Set(['sit', 'sitGround', 'lieDown', 'sleep', 'knockdown', 'getUp', 'tackle', 'eat', 'swim', 'tread', 'float', 'struggle']);
 
 export function randomTraits() {
   const r = () => Math.round(rand(0.05, 0.95) * 100) / 100;
@@ -119,6 +122,7 @@ export class Resident {
   get id() { return this.d.id; }
   get name() { return this.d.name; }
   get t() { return this.d.traits; }
+  get homeKey() { return `home:${this.d.id}`; }
   get x() { return this.group.position.x; }
   get z() { return this.group.position.z; }
 
@@ -207,7 +211,7 @@ export class Resident {
     if (ap.outfit?.assetId && ap.outfit.variantId) addLook(lib.variant(ap.outfit.assetId, ap.outfit.variantId), 'outfit:');
     if (ap.outfit?.hideBase) for (const k of ap.outfit.hideBase) if (!out.hidden.includes(k)) out.hidden.push(k);
     addLook(ap.custom);
-    return out;
+    return mishapLook(this, this.avatar, out);
   }
 
   disposeAvatars() {
@@ -343,7 +347,26 @@ export class Resident {
     this.bubble = { text: '', emoji, kind: 'emote', until: this.sim.realTime + dur };
   }
 
-  play(anim, opts) { this.player.play(anim, opts); }
+  play(anim, opts) {
+    // in deep water every ground animation becomes a swimming one
+    if (this.inWater) anim = SWIM_ANIM[anim] || (WATER_OK.has(anim) ? anim : 'tread');
+    this.player.play(anim, opts);
+  }
+
+  _waterChanged(wasIn) {
+    const sim = this.sim;
+    if (this.inWater) {
+      this.d.wetness = 1;
+      this.d.swimWet = true;
+      if (this.avatar) this.avatar.setWetness(1);
+      const pos = new THREE.Vector3(this.x, this.groundY + 0.1, this.z);
+      sim.effects.splash(pos, 10, this.room ? sim.rooms.fx : undefined);
+      if (sim.isNear(this)) sim.audio.splash?.();
+    }
+    // swap to the matching animation right away
+    const a = this.player.action;
+    if (a) this.play(wasIn ? (a === 'swim' ? 'walk' : 'idle') : a, { fade: 0.25 });
+  }
 
   setExpression(map) {
     if (!this.avatar) return;
@@ -357,7 +380,12 @@ export class Resident {
 
   /** Move to x,z on the ground. snap=false lets the height ease (stepping onto platforms). */
   placeAt(x, z, snap = true) {
-    this.groundY = this.space.heightAt(x, z);
+    // deep water (sea or pool): float at the surface and swim
+    const water = this.space.waterAt?.(x, z) ?? null;
+    const wasIn = this.inWater;
+    this.inWater = water != null;
+    this.groundY = this.inWater ? water - 0.06 : this.space.heightAt(x, z);
+    if (this.inWater !== wasIn) this._waterChanged(wasIn);
     this.group.position.x = x;
     this.group.position.z = z;
     if (snap || Math.abs(this.group.position.y - this.groundY) > 1.2) this.group.position.y = this.groundY;
@@ -406,6 +434,7 @@ export class Resident {
 
   moveSpeed() {
     if (this.moving?.speed) return this.moving.speed;
+    if (this.inWater) return (this.moving?.run ? 1.5 : 0.9) * (this.displayScale || 1) ** 0.5;
     let s = this.moving?.run ? 3.4 : 1.15 + this.t.energy * 0.35;
     if (this.hasEffect('limp')) s = 0.55;
     if (this.d.happiness < 25 && !this.moving?.run) s *= 0.8;
@@ -424,7 +453,36 @@ export class Resident {
     return (this.inside && this.room) || this.sim.island;
   }
 
+  /**
+   * Go inside a location. Rooms nested in other rooms (condo lobby → hallway →
+   * apartment) are walked through one by one: the resident steps into the
+   * outermost room and the room brain follows `route` to the target.
+   */
   enter(locKey, minutes) {
+    const rooms = this.sim.rooms;
+    const chain = rooms?.chain(locKey) || [locKey];
+    if (chain.length > 1) {
+      const at = this.inside ? chain.indexOf(this.inside) : -1;
+      if (this.inside && at < 0) {
+        // somewhere else indoors: head out first, then in
+        this.route = { keys: chain, minutes };
+        this.leaving = true;
+        this.insideUntil = Infinity;
+        return;
+      }
+      if (at < 0) this._enterRoom(chain[0], Infinity);
+      const rest = chain.slice(Math.max(at, 0) + 1);
+      this.route = rest.length ? { keys: rest, minutes } : null;
+      this.leaving = false;
+      if (!rest.length) this.insideUntil = this.sim.clock + minutes;
+      return;
+    }
+    this.route = null;
+    this.leaving = false;
+    this._enterRoom(locKey, minutes);
+  }
+
+  _enterRoom(locKey, minutes, at = null) {
     this.leaveSeat();
     this.stopMoving();
     this.inside = locKey;
@@ -434,13 +492,48 @@ export class Resident {
     if (this.room) {
       // step into the room instance
       this.sim.rooms.residentGroup.add(this.group);
-      const [x, z, rot] = this.room.entry;
+      const [ex, ez, er] = this.room.entry;
+      const x = at?.x ?? ex;
+      const z = at?.z ?? ez;
+      const rot = at?.rot ?? er;
       this.placeAt(x, z);
       this.heading = rot;
       this.targetHeading = rot;
       this.group.visible = true;
       this.play('idle');
     } else this.group.visible = false;
+  }
+
+  /** Walk-through step: go into a room that opens off the current one. */
+  goInto(key) {
+    if (!this.inside || this.sim.rooms?.parentOf(key) !== this.inside) return;
+    this._enterRoom(key, Infinity);
+    this.sim.emit('resident', this);
+  }
+
+  /** Leave the current room into its parent room, or outside if it has none. */
+  stepOut() {
+    const rooms = this.sim.rooms;
+    const parent = rooms?.parentOf(this.inside);
+    if (parent) {
+      const at = rooms.doorIn(this.inside);
+      this._enterRoom(parent, Infinity, at ? { x: at.x, z: at.z, rot: (at.rot ?? 0) + Math.PI } : null);
+      return;
+    }
+    // out of the building
+    const route = this.route;
+    const cb = this.onExit;
+    this.route = null;
+    this.onExit = null;
+    this.exit();
+    if (route) {
+      // only came out to go somewhere else indoors
+      const target = route.keys[route.keys.length - 1];
+      const door = this.sim.locationDoor(target, this);
+      if (door) this.setPlan([{ kind: 'walk', x: door[0], z: door[1] }, { kind: 'enter', loc: target, minutes: route.minutes, onExit: cb }]);
+      return;
+    }
+    if (cb) cb();
   }
 
   exit() {
@@ -450,6 +543,7 @@ export class Resident {
     this.plan = [];
     this.step = null;
     this.working = false;
+    this.leaving = false;
     const loc = this.sim.locationDoor(this.inside, this);
     this.inside = null;
     this.room = null;
@@ -477,13 +571,19 @@ export class Resident {
     const sim = this.sim;
     if (!this.avatar) return;
 
-    // indoors: just wait
+    // indoors: time to leave? (nested rooms are walked out of by the room brain)
     if (this.inside) {
       if (!this.engaged && sim.clock >= this.insideUntil) {
-        const cb = this.onExit;
-        this.onExit = null;
-        this.exit();
-        if (cb) cb();
+        if (this.room && sim.rooms?.parentOf(this.inside)) {
+          this.leaving = true;
+          this.insideUntil = Infinity;
+        } else {
+          const cb = this.onExit;
+          this.onExit = null;
+          this.route = null;
+          this.exit();
+          if (cb) cb();
+        }
       }
     }
 
@@ -519,9 +619,12 @@ export class Resident {
   _runPlan(dt) {
     if (!this.step) {
       if (!this.plan.length) return;
-      this.step = this.plan.shift();
-      this.step.t = 0;
-      this._startStep(this.step);
+      const st = this.plan.shift();
+      this.step = st;
+      st.t = 0;
+      this._startStep(st);
+      // a step can replace the plan (e.g. moving into another room)
+      if (this.step !== st) return;
     }
     const s = this.step;
     s.t += dt;
@@ -545,8 +648,8 @@ export class Resident {
     }
     if (done) {
       if (s.kind === 'sit') { this.leaveSeat(); this.play('idle'); }
+      if (this.step === s) this.step = null;
       if (s.then) s.then();
-      this.step = null;
     }
   }
 
@@ -625,7 +728,7 @@ export class Resident {
     this.play(anim, { speed: anim === 'walk' || anim === 'walkHappy' ? speed / 1.3 : 1 });
     // slipping on a wet island while running
     this.slipCooldown -= dt;
-    if (m.run && !this.inside && this.sim.weather.wetness > 0.55 && this.slipCooldown <= 0 && !this.engaged) {
+    if (m.run && !this.inside && !this.inWater && this.sim.weather.wetness > 0.55 && this.slipCooldown <= 0 && !this.engaged) {
       this.slipCooldown = 3;
       if (chance(0.025 * this.sim.weather.wetness * (this.sim.settings.conflict === 'off' ? 0.3 : 1))) this.sim.slip(this);
     }
@@ -693,7 +796,7 @@ export class Resident {
     const a = this.avatar;
     const vis = this.group.visible;
     // umbrella while it rains (not while fighting/KO)
-    const wantUmbrella = this.d.hasUmbrella && (sim.weather.raining || sim.weather.snowing) && !this.inside && !this.engaged?.isFight && !this.ko && !this.seat;
+    const wantUmbrella = this.d.hasUmbrella && (sim.weather.raining || sim.weather.snowing) && !this.inside && !this.inWater && !this.engaged?.isFight && !this.ko && !this.seat;
     if (wantUmbrella && !this.attach.umbrella) {
       this.attach.umbrella = makeUmbrella(this.d.umbrellaColor);
       sim.fx.add(this.attach.umbrella);
@@ -763,7 +866,8 @@ export class Resident {
   serialize() {
     const d = this.d;
     d.pos = this.inside ? null : [this.x, this.z, this.heading];
-    d.insideState = this.inside ? { loc: this.inside, until: this.insideUntil } : null;
+    const until = Number.isFinite(this.insideUntil) ? this.insideUntil : this.sim.clock + 20;
+    d.insideState = this.inside ? { loc: this.route ? this.route.keys[this.route.keys.length - 1] : this.inside, until } : null;
     return JSON.parse(JSON.stringify(d));
   }
 }

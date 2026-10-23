@@ -3,6 +3,7 @@
 // jealousy, the cold shoulder, dance-offs, breakups). Heated conflicts
 // can escalate into fist fights (fight.js).
 
+import { outfitSocialBias } from './outfits.js';
 import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, TOPICS } from './data.js';
 
@@ -462,21 +463,22 @@ export class Social {
     const cm = CONFLICT_MUL[sim.settings.conflict] ?? 1;
     const irritable = sim.weather.irritability() + (a.d.happiness < 30 ? 0.5 : 0) + (a.d.needs.hunger < 25 ? 0.4 : 0) + (a.painLevel > 10 ? 0.3 : 0);
     if (rb < -40 && chance(0.6)) return 'cold';
+    const ob = outfitSocialBias(a, b);
     const w = [
       ['chat', 5 + Math.max(0, r) / 20],
-      ['joke', 0.6 + t.quirk * 2],
-      ['compliment', t.kindness * 1.6 + (ra.crush ? 1.5 : 0)],
+      ['joke', (0.6 + t.quirk * 2) * ob.joke],
+      ['compliment', (t.kindness * 1.6 + (ra.crush ? 1.5 : 0)) * ob.compliment],
       ['gossip', 0.5 + (1 - t.kindness) * 0.8],
       ['hug', r > 50 ? 1.5 + t.kindness : 0],
       ['date', ra.partner ? 4 : 0],
-      ['prank', (t.quirk * 1.2 + t.temper * 0.3) * (cm > 0 ? 1 : 0.3)],
+      ['prank', (t.quirk * 1.2 + t.temper * 0.3) * (cm > 0 ? 1 : 0.3) * ob.prank],
       ['danceOff', t.energy * 0.8 + (r < 0 ? 0.6 : 0)],
-      ['argue', cm * (0.25 + t.temper * 1.6 + (r < 0 ? -r / 25 : 0) + irritable * 1.5 + ra.grudge / 30)],
-      ['insult', cm * ((1 - t.kindness) * 0.9 + (r < 0 ? 0.8 : 0)) * (t.kindness < 0.45 ? 1 : 0.25)],
+      ['argue', cm * (0.25 + t.temper * 1.6 + (r < 0 ? -r / 25 : 0) + irritable * 1.5 + ra.grudge / 30) * ob.argue],
+      ['insult', cm * ((1 - t.kindness) * 0.9 + (r < 0 ? 0.8 : 0)) * (t.kindness < 0.45 ? 1 : 0.25) * ob.insult],
       ['apology', (r < -10 || ra.grudge > 25) ? t.kindness * 2.5 : 0],
       ['breakup', ra.partner && r < 15 ? 3 : 0],
       // bold residents with a big crush may confess without asking the player first
-      ['confess', sim.settings.romance && ra.crush && !ra.partner && r > 65 ? t.confidence * 1.2 : 0],
+      ['confess', sim.settings.romance && ra.crush && !ra.partner && r > 65 ? t.confidence * 1.2 * ob.confess : 0],
     ];
     return weightedPick(w);
   }

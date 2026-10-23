@@ -4,15 +4,27 @@
 import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, INJURIES } from './data.js';
 import { jobOf, isOnShift, planOutdoorWork } from './jobs.js';
+import { causeMishap } from './outfits.js';
+
+function swimWeight(res, sim) {
+  const w = sim.weather;
+  const hour = sim.minuteOfDay / 60;
+  if (!sim.swim.canSwim(res) || w.stormy || w.snowing || hour < 7 || hour > 20) return 0;
+  let wt = (w.raining ? 0.2 : w.type === 'sunny' ? 2.2 : 1) * (0.6 + res.t.energy);
+  if (sim.swim.guardOnDuty('beach', sim.island)) wt *= 1.5; // people feel safer with a lifeguard watching
+  if (res.d.outfits?.some((o) => o.tags?.includes('swim')) || res.d.mainOutfit?.tags?.includes('swim')) wt *= 1.4;
+  return wt;
+}
 
 export function think(res, sim) {
   if (res.plan.length || res.step || res.engaged || res.inside || res.ko || res.moving) return;
+  if (res.activity && res.activity !== 'work' && !res.inWater) res.activity = null;
   const hour = sim.minuteOfDay / 60;
   const d = res.d;
   const n = d.needs;
   const w = sim.weather;
   const island = sim.island;
-  const home = island.houseOf(res.id);
+  const home = sim.homeOf(res);
 
   // --- night: go home and sleep
   const bedtime = 22 + (res.t.energy - 0.5) * 2;
@@ -21,12 +33,17 @@ export function think(res, sim) {
       const wake = 6.5 + rand(0, 1.5);
       let minutes = hour >= 12 ? (24 - hour + wake) * 60 : (wake - hour) * 60;
       if (n.energy < 12 && hour > 6 && hour < bedtime) minutes = 120;
+      minutes = Math.max(30, minutes);
       res.setPlan([
         { kind: 'walk', x: home.door[0], z: home.door[1] },
         { kind: 'call', fn: () => res.say(line('sleepy'), { emoji: '💤', sound: false }) },
-        { kind: 'enter', loc: `home:${res.id}`, minutes: Math.max(30, minutes), onExit: () => { n.energy = 100; } },
+        // + time for the morning routine (it ends the stay early when it's done)
+        { kind: 'enter', loc: `home:${res.id}`, minutes: minutes + 45, onExit: () => { n.energy = 100; } },
+        { kind: 'call', fn: () => { res.wakeAt = sim.clock + minutes; } },
       ]);
       res.sleeping = true;
+      res.bedtimeDone = false;
+      res.wakeAt = sim.clock + 1e6; // set properly once they're inside
       return;
     }
   }
@@ -48,16 +65,21 @@ export function think(res, sim) {
   const job = jobOf(res);
   if (job && isOnShift(res, sim) && n.energy > 12 && n.hunger > 18) {
     if (job.indoor) {
-      const loc = sim.locations[job.place];
+      const door = sim.locationDoor(job.place, res);
       const minutes = Math.max(20, job.end * 60 - sim.minuteOfDay);
-      res.setPlan([
-        { kind: 'call', fn: () => { if (chance(0.3)) res.say(`Off to work! ${job.icon}`, { emoji: '💼' }); } },
-        { kind: 'walk', x: loc.door[0], z: loc.door[1] },
-        { kind: 'enter', loc: job.place, minutes },
-      ]);
+      if (door) {
+        res.setPlan([
+          { kind: 'call', fn: () => { res.activity = 'work'; sim.autoDress(res, { quiet: true }); if (chance(0.3)) res.say(`Off to work! ${job.icon}`, { emoji: '💼' }); } },
+          { kind: 'walk', x: door[0], z: door[1] },
+          { kind: 'enter', loc: job.place, minutes, onExit: () => { res.activity = null; } },
+        ]);
+        return;
+      }
+    }
+    if (!job.indoor && planOutdoorWork(res, sim)) {
+      if (res.activity !== 'work') { res.activity = 'work'; sim.autoDress(res, { quiet: true }); }
       return;
     }
-    if (planOutdoorWork(res, sim)) return;
   }
 
   // --- hungry: café
@@ -68,7 +90,7 @@ export function think(res, sim) {
       res.setPlan([
         { kind: 'walk', x: seat.x, z: seat.z },
         { kind: 'sit', seat, dur: rand(25, 40), anim: 'eat', expr: { happy: 0.6 } },
-        { kind: 'call', fn: () => { n.hunger = clamp(n.hunger + 70, 0, 100); res.emote('😋', 2); } },
+        { kind: 'call', fn: () => { n.hunger = clamp(n.hunger + 70, 0, 100); res.emote('😋', 2); if (chance(0.02)) causeMishap(sim, res, 'stain'); } },
       ]);
     } else {
       res.setPlan([
@@ -119,6 +141,7 @@ export function think(res, sim) {
     ['wander', 3],
     ['bench', 2 + (1 - res.t.energy) * 2],
     ['beach', w.raining ? 0.3 : 2],
+    ['swim', swimWeight(res, sim)],
     ['sea', 1.2],
     ['dance', 1 + res.t.energy * 2 + res.t.quirk],
     ['exercise', res.t.energy * 2],
@@ -130,6 +153,8 @@ export function think(res, sim) {
     ['emote', sim.registry.emotes.size ? 1.5 : 0],
     ['visit', 1.5 + res.t.sociability],
     ['home', 0.5 + (1 - res.t.sociability) * 0.7],
+    ['pool', sim.condo.active && sim.swim.canSwim(res) ? (w.raining || w.snowing ? 2 : 0.6) + (sim.condo.unitOf(res.id) != null ? 0.6 : 0) : 0],
+    ['hallway', sim.condo.unitOf(res.id) != null ? 0.5 + res.t.sociability : 0],
   ];
   const what = weightedPick(choices);
   const happyExpr = { happy: 0.5 + res.t.energy * 0.3 };
@@ -158,6 +183,10 @@ export function think(res, sim) {
       n.fun = clamp(n.fun + 10, 0, 100);
       return;
     }
+    case 'swim': {
+      sim.swim.planSwim(res);
+      return;
+    }
     case 'sea': {
       const spot = pick(island.lookouts);
       if (spot) {
@@ -171,14 +200,21 @@ export function think(res, sim) {
       res.setPlan([
         { kind: 'walk', x: spot.entry[0], z: spot.entry[1] },
         { kind: 'walk', x: spot.x, z: spot.z },
+        { kind: 'call', fn: () => { res.activity = 'dance'; sim.autoDress(res, { quiet: true }); } },
         { kind: 'anim', anim: 'dance', dur: rand(10, 18), heading: spot.heading, expr: { happy: 1 }, say: line('dance'), emoji: '🎵' },
+        { kind: 'call', fn: () => { res.activity = null; } },
       ]);
       n.fun = clamp(n.fun + 18, 0, 100);
       return;
     }
     case 'exercise': {
       const p = island.randomPoint(6, 20);
-      res.setPlan([{ kind: 'walk', x: p.x, z: p.z }, { kind: 'anim', anim: 'exercise', dur: rand(8, 14), expr: { happy: 0.4 }, emoji: '💪' }]);
+      res.setPlan([
+        { kind: 'walk', x: p.x, z: p.z },
+        { kind: 'call', fn: () => { res.activity = 'exercise'; sim.autoDress(res, { quiet: true }); } },
+        { kind: 'anim', anim: 'exercise', dur: rand(8, 14), expr: { happy: 0.4 }, emoji: '💪' },
+        { kind: 'call', fn: () => { if (chance(0.02)) causeMishap(sim, res, 'seam'); res.activity = null; } },
+      ]);
       n.fun = clamp(n.fun + 8, 0, 100);
       return;
     }
@@ -218,7 +254,7 @@ export function think(res, sim) {
       const friends = sim.residents.filter((o) => o !== res && o.inside === `home:${o.id}` && !o.sleeping && res.relScore(o.id) > 20);
       if (friends.length) {
         const f = friends[Math.floor(Math.random() * friends.length)];
-        const h = island.houseOf(f.id);
+        const h = sim.homeOf(f);
         if (h) {
           res.setPlan([
             { kind: 'walk', x: h.door[0], z: h.door[1] },
@@ -233,6 +269,27 @@ export function think(res, sim) {
     case 'home': {
       if (home) {
         res.setPlan([{ kind: 'walk', x: home.door[0], z: home.door[1] }, { kind: 'enter', loc: `home:${res.id}`, minutes: rand(40, 100) }]);
+        return;
+      }
+      break;
+    }
+    case 'pool': {
+      const door = sim.locationDoor('condoPool', res);
+      if (door) {
+        res.setPlan([
+          { kind: 'call', fn: () => { if (chance(0.4)) res.say('Pool day! 🏊', { emoji: '🏊' }); } },
+          { kind: 'walk', x: door[0], z: door[1] },
+          { kind: 'enter', loc: 'condoPool', minutes: rand(30, 60), onExit: () => { res.activity = null; n.fun = clamp(n.fun + 15, 0, 100); } },
+        ]);
+        return;
+      }
+      break;
+    }
+    case 'hallway': {
+      const unit = sim.condo.unitOf(res.id);
+      const door = sim.locationDoor('condo', res);
+      if (unit != null && door) {
+        res.setPlan([{ kind: 'walk', x: door[0], z: door[1] }, { kind: 'enter', loc: `hall:${sim.condo.floorOf(unit)}`, minutes: rand(15, 30), onExit: () => { n.social = clamp(n.social + 8, 0, 100); } }]);
         return;
       }
       break;

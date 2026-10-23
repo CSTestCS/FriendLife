@@ -401,6 +401,66 @@ export const BUILTIN_ANIMATIONS = [
       { t: 2, pose: { hips: [-90, 0, 0], chest: [-4, 0, 0], head: [-5, 20, 0] }, hips: [0, -0.82, -0.5] },
     ],
   },
+  // ---- swimming (the resident's root sits at the water surface)
+  {
+    name: 'swim', duration: 1.2, loop: true, base: 'none',
+    keys: [
+      { t: 0, pose: { hips: [78, 0, 0], leftUpperArm: [0, 0, 85], rightUpperArm: [20, 0, 74], leftLowerArm: [0, -10, 0], rightLowerArm: [0, 10, 0], leftUpperLeg: [-12, 0, 4], rightUpperLeg: [12, 0, -4], leftLowerLeg: [10, 0, 0], rightLowerLeg: [20, 0, 0], head: [-35, 25, 0] }, hips: [0, -1.0, -0.25] },
+      { t: 0.3, pose: { leftUpperArm: [-70, 0, -74], rightUpperArm: [0, 0, -10], leftUpperLeg: [12, 0, 4], rightUpperLeg: [-12, 0, -4], leftLowerLeg: [20, 0, 0], rightLowerLeg: [10, 0, 0], head: [-35, 0, 0] }, hips: [0, -0.98, -0.25] },
+      { t: 0.6, pose: { leftUpperArm: [20, 0, -74], rightUpperArm: [0, 0, -85], leftUpperLeg: [-12, 0, 4], rightUpperLeg: [12, 0, -4], leftLowerLeg: [10, 0, 0], rightLowerLeg: [20, 0, 0], head: [-35, -25, 0] }, hips: [0, -1.0, -0.25] },
+      { t: 0.9, pose: { leftUpperArm: [0, 0, 10], rightUpperArm: [-70, 0, 74], leftUpperLeg: [12, 0, 4], rightUpperLeg: [-12, 0, -4], leftLowerLeg: [20, 0, 0], rightLowerLeg: [10, 0, 0], head: [-35, 0, 0] }, hips: [0, -0.98, -0.25] },
+    ],
+  },
+  {
+    name: 'tread', duration: 1.6, loop: true,
+    keys: [
+      { t: 0, pose: { leftUpperArm: [-20, 25, -35], rightUpperArm: [-20, -25, 35], leftLowerArm: [0, -30, 0], rightLowerArm: [0, 30, 0], leftUpperLeg: [-35, 0, 8], rightUpperLeg: [5, 0, -8], leftLowerLeg: [50, 0, 0], rightLowerLeg: [20, 0, 0], head: [-8, 0, 0] }, hips: [0, -1.3, 0] },
+      { t: 0.8, pose: { leftUpperArm: [-20, -15, -35], rightUpperArm: [-20, 15, 35], leftUpperLeg: [5, 0, 8], rightUpperLeg: [-35, 0, -8], leftLowerLeg: [20, 0, 0], rightLowerLeg: [50, 0, 0], head: [-5, 0, 0] }, hips: [0, -1.25, 0] },
+    ],
+  },
+  {
+    name: 'float', duration: 4, loop: true, base: 'none',
+    keys: [
+      { t: 0, pose: { hips: [-82, 0, 0], leftUpperArm: [0, 0, -15], rightUpperArm: [0, 0, 15], leftUpperLeg: [0, 0, 12], rightUpperLeg: [0, 0, -12], head: [-10, 0, 0] }, hips: [0, -1.02, 0.3] },
+      { t: 2, pose: { hips: [-80, 0, 0], leftUpperArm: [0, 0, -5], rightUpperArm: [0, 0, 5], head: [-6, 0, 0] }, hips: [0, -1.0, 0.3] },
+    ],
+  },
+  {
+    name: 'struggle', duration: 0.9, loop: true,
+    keys: [
+      { t: 0, pose: { leftUpperArm: [0, 0, 60], rightUpperArm: [-40, 0, -20], leftLowerArm: [0, -40, 0], rightLowerArm: [0, 20, 0], head: [-30, 10, 0], leftUpperLeg: [-30, 0, 8], rightUpperLeg: [10, 0, -8], leftLowerLeg: [60, 0, 0] }, hips: [0, -1.18, 0] },
+      { t: 0.45, pose: { leftUpperArm: [-40, 0, 20], rightUpperArm: [0, 0, -60], leftLowerArm: [0, -20, 0], rightLowerArm: [0, 40, 0], head: [-15, -10, 0], leftUpperLeg: [10, 0, 8], rightUpperLeg: [-30, 0, -8], rightLowerLeg: [60, 0, 0] }, hips: [0, -1.5, 0] },
+    ],
+  },
+  // ---- daily routines
+  {
+    name: 'stretch', duration: 2.4, loop: true,
+    keys: [
+      { t: 0, pose: { leftUpperArm: [0, 0, 70], rightUpperArm: [0, 0, -70], leftLowerArm: [0, 0, 20], rightLowerArm: [0, 0, -20], spine: [-10, 0, 0], head: [-20, 0, 0] }, hips: [0, 0.02, 0] },
+      { t: 1.2, pose: { leftUpperArm: [0, 0, 80], rightUpperArm: [0, 0, -80], spine: [-14, 0, 6], chest: [0, 0, 6], head: [-25, 0, 8] }, hips: [0, 0.03, 0] },
+    ],
+  },
+  {
+    name: 'yawn', duration: 2.2, loop: true,
+    keys: [
+      { t: 0, pose: { rightUpperArm: [-70, 0, 60], rightLowerArm: [0, 120, 0], head: [-18, 0, 0], spine: [-6, 0, 0] } },
+      { t: 1.1, pose: { rightUpperArm: [-72, 0, 58], head: [-22, 0, 4] } },
+    ],
+  },
+  {
+    name: 'brush', duration: 0.5, loop: true,
+    keys: [
+      { t: 0, pose: { rightUpperArm: [-60, 0, 55], rightLowerArm: [0, 125, 0], head: [4, 0, 0] } },
+      { t: 0.25, pose: { rightUpperArm: [-60, 12, 55], rightLowerArm: [0, 120, 8] } },
+    ],
+  },
+  {
+    name: 'dress', duration: 1.4, loop: true,
+    keys: [
+      { t: 0, pose: { leftUpperArm: [-40, 0, -20], rightUpperArm: [-40, 0, 20], leftLowerArm: [0, -60, 0], rightLowerArm: [0, 60, 0], spine: [20, 0, 0], head: [20, 0, 0] } },
+      { t: 0.7, pose: { leftUpperArm: [0, 0, 60], rightUpperArm: [0, 0, -60], leftLowerArm: [0, -20, 0], rightLowerArm: [0, 20, 0], spine: [0, 0, 0], head: [-5, 0, 0] }, hips: [0, 0.01, 0] },
+    ],
+  },
   {
     name: 'point', duration: 2, loop: true,
     keys: [

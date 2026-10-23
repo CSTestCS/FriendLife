@@ -4,6 +4,7 @@ import { personalityLabel, INJURIES, FOODS, foodById, itemById } from '../sim/da
 import { PROBLEM_DEFS } from '../sim/problems.js';
 import { formatClock } from '../core/util.js';
 import { closetSection } from './closet.js';
+import { fixMishap } from '../sim/outfits.js';
 import { jobSection, openJobPicker } from './rooms.js';
 import { openVoiceEditor } from './voiceEditor.js';
 import { assignJob } from '../sim/jobs.js';
@@ -73,6 +74,7 @@ export class Panel {
       A(`🧺 Towel (${inv.towel || 0})`, () => toast(sim.giveTowel(r)), { disabled: !inv.towel || r.d.wetness < 0.05 }),
       A(r.d.hasUmbrella ? '☂️ Has umbrella' : `☂️ Umbrella (${inv.umbrella || 0})`, () => toast(sim.giveUmbrella(r)), { disabled: r.d.hasUmbrella || !inv.umbrella }),
       A(`💊 Medicine (${inv.medicine || 0})`, () => { if (sim.useItem('medicine')) { r.d.injuries = r.d.injuries.filter((i) => i.type !== 'cold'); r.refreshAttachments(); toast(`${r.name} feels better!`); this.render(); } }, { disabled: !inv.medicine || !r.hasEffect('sneeze') }),
+      r.d.mishap ? A(`🧵 Sew (${inv.sewkit || 0})`, () => { if (sim.useItem('sewkit')) { fixMishap(sim, r, true); r.say('Good as new!', { emoji: '🧵' }); this.render(); } }, { disabled: !inv.sewkit || r.d.mishap.type === 'pajamas' || r.d.mishap.type === 'shoes' }) : null,
       A('🤗 Comfort', () => toast(sim.comfort(r))),
       A('🤝 Set Up…', () => this.setupInteraction(), { title: 'Make this resident interact with someone' }),
       A('🎬 Animate…', () => this.animPicker()),

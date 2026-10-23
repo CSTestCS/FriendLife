@@ -40,7 +40,7 @@ export class Hud {
       h('button', { title: 'Shop', onclick: () => this.app.openShop() }, '🛍️', h('span', { class: 'tb-label' }, ' Shop')),
       h('button', { title: 'Island news', onclick: () => this.app.openNews() }, '📰', h('span', { class: 'tb-label' }, ' News')),
       h('button', { title: 'Island dictionary — words residents use', onclick: () => this.app.openDictionary() }, '📖', h('span', { class: 'tb-label' }, ' Words')),
-      h('button', { title: 'Look inside houses, the café, shop and clinic (H)', onclick: () => this.app.openRooms() }, '🏠', h('span', { class: 'tb-label' }, ' Rooms')),
+      h('button', { title: 'Look inside houses, the café, shop, clinic and condo (H)', onclick: () => this.app.openRooms() }, '🏠', h('span', { class: 'tb-label' }, ' Rooms')),
       h('button', { title: 'Import & manage VRM characters, outfits, textures, animations', onclick: () => this.app.openLibrary() }, '📦', h('span', { class: 'tb-label' }, ' Library')),
       h('button', { title: 'Animation Studio', onclick: () => this.app.openStudio() }, '🎬', h('span', { class: 'tb-label' }, ' Studio')),
       h('button', { title: 'Decorate the island (B)', onclick: () => this.app.toggleBuild() }, '🔨', h('span', { class: 'tb-label' }, ' Build')),

@@ -5,14 +5,18 @@ import * as THREE from 'three';
 import { stdMat, patchWeather } from '../engine/materials.js';
 import {
   makeHouse, makeShop, makeCafe, makeClinic, makeTree, makeBench, makeLamp, makeRock, makeFlowerBed,
-  makeFountain, makeBeachUmbrella, makePier, makeStage, makeFence, BUILD_CATALOG, nightMaterials, makeLabelTexture,
+  makeFountain, makeBeachUmbrella, makePier, makeStage, makeFence, BUILD_CATALOG, nightMaterials, makeLabelTexture, makeCondo,
 } from './props.js';
 import { rand, uid } from '../core/util.js';
 
 export const ISLAND_RADIUS = 44;
+export const WATER_Y = -0.55;
+export const MAX_HOUSES = 10; // later residents move into the condo
+const SWIM_DEPTH = -0.95; // terrain below this is deep enough to swim
 const STAGE_ROT = Math.atan2(6, -12); // front of the stage faces the plaza
 
 function fract(x) { return x - Math.floor(x); }
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 function hash2(x, z) { return fract(Math.sin(x * 127.1 + z * 311.7) * 43758.5453); }
 function vnoise(x, z) {
   const ix = Math.floor(x), iz = Math.floor(z);
@@ -175,7 +179,24 @@ export class Island {
       const z = Math.sin(a) * radius;
       if (Math.hypot(x - -14, z - -13) < 7) continue; // keep clear of clinic
       const rot = Math.atan2(-x, -z); // face plaza
+      if (ring === 1 && Math.abs(x) < 1) {
+        // the middle of the back row is reserved for the condo tower
+        this.condoSlot = { x, z, rot };
+        continue;
+      }
       this.houses.push({ index: this.houses.length, x, z, rot, owner: null, obj: null });
+    }
+
+    // condo (shown once the island has more residents than houses)
+    {
+      const c = this.condoSlot;
+      const fwd = new THREE.Vector3(Math.sin(c.rot), 0, Math.cos(c.rot));
+      const right = new THREE.Vector3(Math.cos(c.rot), 0, -Math.sin(c.rot));
+      const door = new THREE.Vector3(c.x, 0, c.z).addScaledVector(fwd, 4.7);
+      const annex = new THREE.Vector3(c.x, 0, c.z).addScaledVector(right, 5.6);
+      this.condoObstacles = [{ x: c.x, z: c.z, r: 4.0 }, { x: annex.x, z: annex.z, r: 2.7 }];
+      this.condoReserve = this.condoObstacles.map((o) => this.addObstacle(o.x, o.z, o.r + 1.5));
+      this.addLocation('condo', { pos: [door.x, door.z], door: [door.x, door.z], radius: 0.6, label: 'Condo', indoor: true, rotY: c.rot });
     }
 
     // ---- paths from plaza to places ----
@@ -219,6 +240,32 @@ export class Island {
       const z = Math.sqrt(Math.max(0, (ISLAND_RADIUS - 5) ** 2 - x * x));
       this.addStatic(u, x, z, rand(0, 6), 0.3);
       this.seats.push({ id: uid('seat'), x: x + 0.6, z: z + 0.4, rot: Math.PI, area: 'beach', ground: true, occupant: null });
+    }
+    // lifeguard tower looking out over the swimming area
+    {
+      const t = new THREE.Group();
+      const white = stdMat('#ffffff', { roughness: 0.6 });
+      const red = stdMat('#e8453c', { roughness: 0.6 });
+      for (const [lx, lz] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.6, 0.1), white);
+        leg.position.set(lx, 0.8, lz);
+        t.add(leg);
+      }
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.1, 1.2), white);
+      deck.position.y = 1.6;
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.12), red);
+      seat.position.set(0, 1.95, -0.45);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(0.95, 0.5, 4), red);
+      roof.position.y = 2.95;
+      roof.rotation.y = Math.PI / 4;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), white);
+      pole.position.set(0.5, 2.25, -0.5);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.3), new THREE.MeshStandardMaterial({ map: makeLabelTexture('🛟 LIFEGUARD', { w: 512, h: 128 }) }));
+      sign.position.set(0, 1.35, 0.62);
+      t.add(deck, seat, roof, pole, sign);
+      t.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      this.addStatic(t, 1.5, 40.2, 0, 0.75);
+      this.lifeguardPost = { x: 1.5, z: 41.3, rot: 0 };
     }
     const pier = makePier(10);
     pier.position.set(-14, 0, Math.sqrt(ISLAND_RADIUS ** 2 - 14 * 14) - 4);
@@ -267,6 +314,30 @@ export class Island {
       const r = ISLAND_RADIUS - 5.5;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (!this.isBlocked(x, z, 1)) this.lookouts.push({ x, z, rot: Math.atan2(x, z) });
+    }
+    for (const o of this.condoReserve) this.obstacles.splice(this.obstacles.indexOf(o), 1);
+    this.condoReserve = [];
+  }
+
+  /** Show / hide the condo tower (only there while someone lives in it). */
+  showCondo(on) {
+    if (!!this.condoShown === !!on) return;
+    this.condoShown = !!on;
+    const c = this.condoSlot;
+    if (on) {
+      if (!this.condoObj) {
+        this.condoObj = makeCondo();
+        this.condoObj.position.set(c.x, 0, c.z);
+        this.condoObj.rotation.y = c.rot;
+      }
+      this.group.add(this.condoObj);
+      this.locations.condo.building = this.condoObj;
+      this.condoActive = this.condoObstacles.map((o) => this.addObstacle(o.x, o.z, o.r));
+    } else {
+      if (this.condoObj) this.group.remove(this.condoObj);
+      for (const o of this.condoActive || []) { const i = this.obstacles.indexOf(o); if (i >= 0) this.obstacles.splice(i, 1); }
+      this.condoActive = [];
+      this.locations.condo.building = null;
     }
   }
 
@@ -327,13 +398,13 @@ export class Island {
   }
 
   // ---- houses ----
+  /** Give a resident a house. Returns null once MAX_HOUSES are taken (they get a condo unit instead). */
   assignHouse(residentId, name, preferIndex = null) {
+    const taken = this.houses.filter((h) => h.owner && h.owner !== residentId).length;
+    if (taken >= MAX_HOUSES && !this.houses.some((h) => h.owner === residentId)) return null;
     let slot = preferIndex != null ? this.houses[preferIndex] : null;
     if (!slot || (slot.owner && slot.owner !== residentId)) slot = this.houses.find((h) => !h.owner);
-    if (!slot) {
-      // island is full: residents share the last house
-      slot = this.houses[this.houses.length - 1];
-    }
+    if (!slot) return null;
     slot.owner = residentId;
     if (slot.obj) { this.group.remove(slot.obj); }
     const [wall, roof] = HOUSE_COLORS[slot.index % HOUSE_COLORS.length];
@@ -439,6 +510,32 @@ export class Island {
       if (!this.isBlocked(x, z, 1)) return { x, z };
     }
     return { x: 0, z: 6 };
+  }
+
+  // ---- water (swimming) ----
+  /** Water surface height where it is deep enough to swim, else null. */
+  waterAt(x, z) {
+    return terrainHeight(x, z) < SWIM_DEPTH ? WATER_Y : null;
+  }
+
+  /** A spot on the beach right at the water's edge. */
+  shorePoint(nearX = null) {
+    const x = nearX != null ? clampN(nearX, -7, 11) : rand(-6, 10);
+    let z = 32;
+    while (z < 60 && terrainHeight(x, z) > -0.4) z += 0.25;
+    return { x, z: z - 0.9, heading: 0 };
+  }
+
+  /** A random point in the swimming area off the beach. */
+  swimSpot() {
+    for (let i = 0; i < 20; i++) {
+      const x = rand(-7, 11);
+      let z = 38;
+      while (z < 60 && terrainHeight(x, z) > -1.25) z += 0.25;
+      z += rand(0.3, 4.5);
+      if (this.waterAt(x, z) != null) return { x, z };
+    }
+    return { x: 2, z: 47 };
   }
 
   heightAt(x, z) {

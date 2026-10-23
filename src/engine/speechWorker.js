@@ -2,6 +2,7 @@
 // Worker so rendering never stalls the game. Bundled to dist/speech.js.
 // Also works as a plain <script> (fallback when workers are unavailable):
 // it then exposes self.FriendLifeSpeech.render(jobs).
+import './speechQuiet.js';
 import meSpeak from 'mespeak';
 import config from 'mespeak/src/mespeak_config.json';
 import en from 'mespeak/voices/en/en.json';

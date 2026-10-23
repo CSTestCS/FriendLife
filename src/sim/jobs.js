@@ -46,7 +46,14 @@ export const JOBS = {
     label: 'Lifeguard', icon: '🛟', place: 'beach', start: 10, end: 17, wage: 5,
     titles: ['Trainee Lifeguard', 'Lifeguard', 'Head Lifeguard', 'Beach Captain'], anims: ['idleLook', 'exercise', 'point'],
     fit: { energy: 0.7, confidence: 0.6 }, rainOff: true,
-    perk: 'Beachgoers relax more (and fewer people slip around the beach).',
+    perk: 'Watches the swimmers and rescues anyone in trouble at once. Swimmers are safer and the beach is more fun.',
+  },
+  poolguard: {
+    label: 'Pool Lifeguard', icon: '🏊', place: 'condoPool', indoor: true, start: 9, end: 20, wage: 5, needs: 'condo',
+    titles: ['Pool Helper', 'Pool Lifeguard', 'Aquatics Lead', 'Aquatics Director'], anims: ['idleLook', 'point', 'idle'],
+    fit: { energy: 0.6, confidence: 0.6, kindness: 0.3 },
+    serve: 'Walk, don\'t run, {b}!',
+    perk: 'Watches the condo\'s indoor pool and rescues anyone in trouble.',
   },
   mail: {
     label: 'Mail Carrier', icon: '📮', place: 'route', start: 8, end: 12, wage: 5,
@@ -94,6 +101,7 @@ export function isWorkDay(res, sim) {
 export function isOnShift(res, sim) {
   const j = jobOf(res);
   if (!j || !isWorkDay(res, sim)) return false;
+  if (j.needs === 'condo' && !sim.condo?.active) return false;
   const h = sim.minuteOfDay / 60;
   if (j.rainOff && (sim.weather.raining || sim.weather.snowing)) return false;
   return h >= j.start && h < j.end;
@@ -121,8 +129,8 @@ export function onDuty(sim, jobId) {
 export function updateJobs(sim, min) {
   for (const r of sim.residents) {
     const j = jobOf(r);
-    if (!j) { r.working = false; continue; }
-    if (!isOnShift(r, sim)) r.working = false;
+    if (!j) { r.working = false; if (r.activity === 'work') r.activity = null; continue; }
+    if (!isOnShift(r, sim)) { r.working = false; if (r.activity === 'work') r.activity = null; }
     if (!r.working) continue;
     const job = r.d.job;
     const pay = (jobWage(r) / 60) * min;
@@ -207,12 +215,26 @@ export function planOutdoorWork(res, sim) {
       return true;
     }
     case 'lifeguard': {
-      const x = loc.beach.x + rand(-8, 8), z = loc.beach.z + rand(-1.5, 1);
-      work(x, z, 0, rand(15, 30));
+      // mostly at the tower watching the water, sometimes patrolling the shore
+      const post = island.lifeguardPost;
+      const swimmers = sim.residents.filter((r) => r.inWater && !r.inside);
+      if (post && (chance(0.65) || swimmers.length)) {
+        res.setPlan([
+          { kind: 'walk', x: post.x, z: post.z },
+          { kind: 'call', fn: () => { res.working = true; } },
+          { kind: 'anim', anim: swimmers.length && chance(0.4) ? 'point' : 'idleLook', dur: rand(12, 25), heading: post.rot, expr: { happy: 0.2 } },
+        ]);
+      } else {
+        const p = island.shorePoint();
+        work(p.x, p.z - 0.5, 0, rand(10, 20));
+      }
       return true;
     }
     case 'mail': {
       const houses = island.houses.filter((h) => h.owner && h.owner !== res.id && h.door);
+      // the condo gets one mailbox stop for all its residents
+      const condoFolks = sim.residents.filter((r) => r !== res && sim.condo.unitOf(r.id) != null);
+      if (condoFolks.length) houses.push({ owner: pick(condoFolks).id, door: loc.condo.door });
       if (!houses.length) return false;
       const h = pick(houses);
       res.setPlan([

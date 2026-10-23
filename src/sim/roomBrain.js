@@ -1,16 +1,103 @@
 // What residents do while inside a room instance.
 import { chance, clamp, rand, weightedPick } from '../core/util.js';
 import { isOnShift, JOBS } from './jobs.js';
+import { causeMishap } from './outfits.js';
+import { pick } from '../core/util.js';
+
+/**
+ * Bedtime and morning routines at home.
+ * Bedtime: brush teeth, change into sleepwear, maybe read, then bed.
+ * Morning: wake up, stretch, get dressed (or forget to…), breakfast, head out.
+ */
+function routines(res, sim, room) {
+  const n = res.d.needs;
+  const spot = (type) => room.freeSpot(type) || room.spots.find((x) => x.type === type && x.occupant === res.id);
+  const sit = (sp, dur, extra = {}) => (sp ? [{ kind: 'walk', x: sp.x, z: sp.z }, { kind: 'sit', seat: sp, dur, anim: sp.anim, ...extra }] : []);
+  // ---- bedtime
+  if (res.sleeping && sim.clock < (res.wakeAt ?? Infinity) && !res.bedtimeDone) {
+    res.bedtimeDone = true;
+    const steps = [
+      { kind: 'call', fn: () => res.say(pick(['Time to get ready for bed~', '*yawn* Bedtime...', 'What a day!']), { emoji: '🌙', sound: false }) },
+      ...sit(spot('kitchen'), rand(4, 6), { anim: 'brush', emoji: '🪥', say: '*brush brush*' }),
+      ...sit(spot('closet'), 3, { anim: 'dress', emoji: '👚', then: () => { res.activity = 'sleep'; sim.autoDress(res, { quiet: true, force: true }); } }),
+    ];
+    if (res.t.quirk > 0.5 || chance(0.35)) steps.push(...sit(spot('books'), rand(5, 9), { anim: 'think', emoji: '📖' }));
+    steps.push({ kind: 'call', fn: () => { res.activity = 'sleep'; res.say(pick(['Good night!', 'Nighty night~', 'Zzz...']), { emoji: '💤', sound: false }); } });
+    res.setPlan(steps);
+    return true;
+  }
+  // ---- morning
+  if (res.sleeping && sim.clock >= (res.wakeAt ?? Infinity)) {
+    res.sleeping = false;
+    res.bedtimeDone = false;
+    res.wakeAt = null;
+    const groggy = n.energy < 55 || res.t.energy < 0.3;
+    const forgets = chance(0.035 + (groggy ? 0.05 : 0) + (res.t.quirk > 0.7 ? 0.03 : 0));
+    const steps = [
+      { kind: 'anim', anim: groggy ? 'yawn' : 'stretch', dur: 3, say: pick(groggy ? ['*yaaawn*... five more minutes...', 'Mmh... morning already?'] : ['Good morning! ☀️', 'Rise and shine!', 'A brand new day!']), emoji: groggy ? '🥱' : '☀️' },
+      ...sit(spot('closet'), 3, { anim: 'dress', emoji: forgets ? '' : '👕', then: () => {
+        res.activity = null;
+        if (forgets) causeMishap(sim, res, 'pajamas');
+        else if (chance(0.015)) { sim.autoDress(res, { quiet: true, force: true }); causeMishap(sim, res, 'inside'); }
+        else sim.autoDress(res, { quiet: true, force: true });
+      } }),
+      ...sit(spot('kitchen'), rand(4, 7), { anim: 'eatStand', emoji: '🍳', then: () => { n.hunger = clamp(n.hunger + 30, 0, 100); } }),
+      { kind: 'call', fn: () => { res.insideUntil = Math.min(res.insideUntil, sim.clock + rand(2, 10)); } },
+    ];
+    res.setPlan(steps);
+    return true;
+  }
+  return false;
+}
+
+/** In a hallway: stop for a chat with a neighbour now and then. */
+function meetNeighbour(res, sim, others) {
+  if (!others.length || sim.clock - (res.hallChatAt ?? -999) < 90 || !chance(0.45)) return false;
+  res.hallChatAt = sim.clock;
+  const o = others[Math.floor(Math.random() * others.length)];
+  if (o.seat?.type === 'bed') return false;
+  if (!o.d.relationships[res.id]?.met) res.say(`Oh, hi! You live on this floor too?`, { emoji: '👋' });
+  const kind = sim.social.chooseKind(res, o) || 'chat';
+  return !!sim.social.start(res, o, kind, { indoor: true });
+}
 
 export function thinkIndoors(res, sim, room) {
   if (res.plan.length || res.step || res.engaged || res.ko || res.moving) return;
   const n = res.d.needs;
   const hour = sim.minuteOfDay / 60;
   const others = sim.residents.filter((o) => o !== res && o.inside === res.inside && !o.engaged && !o.ko);
+  const rooms = sim.rooms;
+
+  // walking through nested rooms (condo lobby → hallway → apartment / pool)
+  if (res.route) {
+    const r = res.route;
+    const i = r.keys.indexOf(res.inside);
+    if (i >= 0) r.keys = r.keys.slice(i + 1);
+    if (!r.keys.length) {
+      res.route = null;
+      res.leaving = false;
+      res.insideUntil = sim.clock + r.minutes;
+    } else if (rooms.parentOf(r.keys[0]) === res.inside) {
+      if (room.kind === 'hall' && meetNeighbour(res, sim, others)) return;
+      const next = r.keys[0];
+      const d = rooms.doorIn(next);
+      if (d) {
+        res.setPlan([{ kind: 'walk', x: d.x, z: d.z }, { kind: 'call', fn: () => res.goInto(next) }]);
+        return;
+      }
+      res.route = null;
+    } else res.leaving = true;
+  }
+  if (res.leaving) {
+    if (room.kind === 'hall' && meetNeighbour(res, sim, others)) return;
+    const [ex, ez] = room.entry;
+    res.setPlan([{ kind: 'walk', x: ex, z: ez }, { kind: 'call', fn: () => res.stepOut() }]);
+    return;
+  }
 
   // working: stand at the job spot and do the job
   const job = res.d.job && JOBS[res.d.job.id];
-  if (job?.place === room.kind && isOnShift(res, sim)) {
+  if ((job?.place === room.kind || job?.place === room.key) && isOnShift(res, sim)) {
     const spot = room.spots.find((s) => s.type === 'work' && s.job === res.d.job.id && (!s.occupant || s.occupant === res.id));
     if (spot) {
       res.working = true;
@@ -43,8 +130,11 @@ export function thinkIndoors(res, sim, room) {
   switch (room.kind) {
     case 'home': {
       const isHome = res.inside === `home:${res.id}`;
+      if (isHome && routines(res, sim, room)) return;
       if (res.sleeping || (isHome && (hour >= 22.5 || hour < 6))) {
-        if (go(room.freeSpot('bed'), rand(60, 120), { expr: { relaxed: 1 }, then: () => { n.energy = clamp(n.energy + 30, 0, 100); } })) return;
+        // sleep until the alarm (the morning routine starts right after)
+        const nap = res.sleeping && Number.isFinite(res.wakeAt) ? clamp(res.wakeAt - sim.clock, 3, 120) : rand(60, 120);
+        if (go(room.freeSpot('bed'), nap, { expr: { relaxed: 1 }, then: () => { n.energy = clamp(n.energy + nap / 4, 0, 100); } })) return;
         if (go(room.freeSpot('sofa'), rand(40, 80), { anim: 'sleep', expr: { relaxed: 1 } })) return;
       }
       const choice = weightedPick([
@@ -54,7 +144,7 @@ export function thinkIndoors(res, sim, room) {
       const spot = room.freeSpot(choice) || room.freeSpot('sofa') || room.freeSpot();
       if (!spot) break;
       const after = {
-        table: () => { n.hunger = clamp(n.hunger + 40, 0, 100); res.emote('😋', 2); },
+        table: () => { n.hunger = clamp(n.hunger + 40, 0, 100); res.emote('😋', 2); if (chance(0.015)) causeMishap(sim, res, 'stain'); },
         kitchen: () => res.emote(chance(0.5) ? '🍳' : '🥘', 2),
         books: () => { n.fun = clamp(n.fun + 10, 0, 100); res.emote('📖', 2); },
         closet: () => { if (res.d.outfits?.length && chance(0.5)) sim.changeOutfit(res, Math.floor(rand(-1, res.d.outfits.length))); },
@@ -65,13 +155,39 @@ export function thinkIndoors(res, sim, room) {
     }
     case 'cafe': {
       if (chance(0.35) && go(room.freeSpot('order'), rand(3, 6), { say: sim.dialogue.fill('One {food}, please!', { a: res }) })) return;
-      if (go(room.freeSpot('table'), rand(12, 25), { expr: { happy: 0.6 }, then: () => { n.hunger = clamp(n.hunger + 35, 0, 100); n.social = clamp(n.social + 8, 0, 100); } })) return;
+      if (go(room.freeSpot('table'), rand(12, 25), { expr: { happy: 0.6 }, then: () => { n.hunger = clamp(n.hunger + 35, 0, 100); n.social = clamp(n.social + 8, 0, 100); if (chance(0.025)) causeMishap(sim, res, 'stain'); } })) return;
       break;
     }
     case 'shop': {
       if (chance(0.25) && go(room.freeSpot('order'), rand(3, 6), { say: 'I\'ll take this one!' })) return;
       if (chance(0.25) && go(room.freeSpot('mirror'), rand(4, 8), { emoji: '🪞' })) return;
       if (go(room.freeSpot('browse'), rand(6, 14), { then: () => { n.fun = clamp(n.fun + 6, 0, 100); } })) return;
+      break;
+    }
+    case 'lobby': {
+      const choice = weightedPick([['sofa', 3], ['mail', 1.5], ['wait', 1], ['stand', 1]]);
+      const spot = room.freeSpot(choice) || room.freeSpot();
+      if (spot && go(spot, rand(8, 20), { then: () => {
+        if (spot.type === 'mail') { res.emote(chance(0.5) ? '✉️' : '📭', 2); if (chance(0.3)) n.social = clamp(n.social + 6, 0, 100); }
+      } })) return;
+      break;
+    }
+    case 'hall': {
+      // neighbours hang around and chat; someone may look out of the window
+      const spot = room.freeSpot(chance(0.6) ? 'chat' : chance(0.5) ? 'window' : 'bench') || room.freeSpot();
+      if (spot && go(spot, rand(6, 14), { expr: { happy: 0.3 } })) return;
+      break;
+    }
+    case 'pool': {
+      if (res.d.job?.id !== 'poolguard' || !isOnShift(res, sim)) {
+        const w = weightedPick([['swim', sim.swim.canSwim(res) ? 4 : 0], ['lounge', 2], ['edge', 1.5]]);
+        if (w === 'swim') {
+          if (!res.activity) { res.activity = 'swim'; sim.autoDress(res, { quiet: true }); }
+          sim.swim.planSwim(res);
+          return;
+        }
+        if (go(room.freeSpot(w), rand(10, 25), { expr: { relaxed: 0.8 }, then: () => { n.fun = clamp(n.fun + 6, 0, 100); } })) return;
+      }
       break;
     }
     case 'clinic': {

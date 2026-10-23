@@ -5,8 +5,9 @@ import { chance, clamp, rand, pick } from '../core/util.js';
 import { foodById, INJURIES } from './data.js';
 import { TERM_CATEGORIES } from './dialogue.js';
 import { JOBS, jobOf, assignJob } from './jobs.js';
+import { MISHAPS, fixMishap } from './outfits.js';
 
-const PRIORITY = { hurt: 5, sick: 5, heartbroken: 4, revenge: 4, makeUp: 3, sad: 3, confess: 3, soaked: 2, hungry: 2, wantFriend: 1, bored: 1, clothes: 1, teachWord: 1, wantJob: 1, quitJob: 2 };
+const PRIORITY = { drowning: 9, mishap: 2, hurt: 5, sick: 5, heartbroken: 4, revenge: 4, makeUp: 3, sad: 3, confess: 3, soaked: 2, hungry: 2, wantFriend: 1, bored: 1, clothes: 1, teachWord: 1, wantJob: 1, quitJob: 2 };
 
 export const PROBLEM_DEFS = {
   hungry: {
@@ -18,6 +19,19 @@ export const PROBLEM_DEFS = {
     icon: '👕',
     text: () => `I'm tired of my look. Can I get something new to wear?`,
     options: [{ id: 'wardrobe', label: 'Open wardrobe…', needs: 'wardrobe' }, { id: 'later', label: 'Maybe later' }],
+  },
+  mishap: {
+    icon: '👗',
+    text: (r) => {
+      const m = r.d.mishap;
+      return m ? `${MISHAPS[m.type]?.line || 'Wardrobe mishap!'} Everyone's looking at me...` : 'Never mind!';
+    },
+    options: [{ id: 'home', label: 'Go home and change' }, { id: 'sew', label: 'Fix it with a Sewing Kit 🧵', needs: 'sewkit' }, { id: 'own', label: 'Own it! 😎' }],
+  },
+  drowning: {
+    icon: '🆘',
+    text: () => 'Help! *glub* I can\'t... *glub* swim back!',
+    options: [{ id: 'ring', label: 'Throw a Life Ring 🛟', needs: 'lifering' }, { id: 'shout', label: 'Shout for help!' }],
   },
   confess: {
     icon: '💗',
@@ -86,6 +100,11 @@ export const PROBLEM_DEFS = {
   },
 };
 
+function r_home(sim, res) {
+  sim.sendTo(res, res.homeKey, rand(15, 25), () => fixMishap(sim, res, true));
+  return true;
+}
+
 export class Problems {
   constructor(sim) {
     this.sim = sim;
@@ -119,6 +138,7 @@ export class Problems {
     const sim = this.sim;
     for (const r of sim.residents) {
       const p = r.d.problem;
+      if (p?.type === 'mishap' && !r.d.mishap) { r.d.problem = null; sim.emit('problem', r); }
       if (p && sim.clock > p.expires) {
         r.d.problem = null;
         r.d.happiness = clamp(r.d.happiness - 6, 0, 100);
@@ -128,7 +148,7 @@ export class Problems {
       if (n.hunger < 28 && chance(0.4)) this.offer(r, 'hungry');
       else if (r.d.injuries.some((i) => i.type === 'cold')) this.offer(r, 'sick');
       else if (r.d.injuries.length && !r.d.injuries.every((i) => i.treated) && chance(0.3)) this.offer(r, 'hurt');
-      else if (r.d.wetness > 0.65 && chance(0.4)) this.offer(r, 'soaked');
+      else if (r.d.wetness > 0.65 && !r.d.swimWet && chance(0.4)) this.offer(r, 'soaked');
       else if (n.fun < 25 && chance(0.3)) this.offer(r, 'bored');
       else if (chance(0.015)) this.offer(r, 'clothes');
       else if (!jobOf(r) && sim.day > 1 && chance(0.012)) this.offer(r, 'wantJob');
@@ -191,6 +211,31 @@ export class Problems {
         res.setEmotion?.('happy', 90);
         res.say?.(pick(['I love it!', 'So fresh!', 'Do I look good? I look good!', 'A whole new me!']));
         break;
+      case 'mishap:home':
+        if (!r_home(sim, res)) break;
+        msg = `${res.name} hurries home to change.`;
+        break;
+      case 'mishap:sew':
+        if (!sim.useItem('sewkit')) return { error: 'You need a 🧵 Sewing Kit (buy one at the shop).' };
+        fixMishap(sim, res, true);
+        res.say('Good as new! Thank you!', { emoji: '🧵' });
+        msg = `${res.name}'s clothes are fixed.`;
+        break;
+      case 'mishap:own':
+        if (res.d.mishap) res.d.mishap.owned = true;
+        res.setEmotion('smug', 90);
+        res.say('You know what? This is a LOOK.', { emoji: '😎' });
+        msg = `${res.name} is rocking the mishap.`;
+        break;
+      case 'drowning:ring':
+        if (!sim.hasItem('lifering')) return { error: 'You need a 🛟 Life Ring (buy one at the shop).' };
+        sim.swim?.rescue(res, null, 'ring');
+        msg = `You threw ${res.name} a life ring!`;
+        break;
+      case 'drowning:shout':
+        if (!sim.swim?.callForHelp(res)) { solved = false; msg = 'Nobody nearby heard you...'; res.d.problem = { ...p }; return { msg }; }
+        msg = 'Someone is swimming out to help!';
+        break;
       case 'clothes:later':
         solved = false;
         msg = 'Okay...';
@@ -251,7 +296,7 @@ export class Problems {
         msg = `${res.name}'s cold is gone!`;
         break;
       case 'sick:rest': {
-        const home = sim.island.houseOf(res.id);
+        const home = sim.homeOf(res);
         if (home) sim.sendTo(res, `home:${res.id}`, 240, () => { const c = res.d.injuries.find((i) => i.type === 'cold'); if (c) c.remaining *= 0.4; });
         msg = `${res.name} goes home to rest.`;
         break;
