@@ -88,7 +88,7 @@ export class Stage {
   constructor(container) {
     this.container = container;
     const r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    r.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    r.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     r.setSize(container.clientWidth, container.clientHeight);
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap;
@@ -222,7 +222,7 @@ export class Stage {
     // refresh reflection map every so often
     this.envTimer -= dt;
     if (this.envTimer <= 0) {
-      this.envTimer = 1.5;
+      this.envTimer = 5; // the sky changes slowly; rebuilding reflections is costly
       const rt = this.pmrem.fromScene(this.envScene, 0, 1, 1000);
       if (this.envRT) this.envRT.dispose();
       this.envRT = rt;
@@ -242,6 +242,14 @@ export class Stage {
       this.shake = damp(this.shake, 0, 10, dt);
     }
     this.sky.position.copy(this.camera.position);
+    // shadows are redrawn every other frame: halves the shadow pass, no visible lag
+    const sm = this.renderer.shadowMap;
+    if (sm.enabled) {
+      sm.autoUpdate = false;
+      this.shadowFrame = (this.shadowFrame || 0) + 1;
+      if (this.shadowFrame % 2 === 0 || this.overrideScene !== this.lastScene) sm.needsUpdate = true;
+    }
+    this.lastScene = this.overrideScene;
     this.renderer.render(this.overrideScene || this.scene, this.camera);
     this.camera.position.sub(off);
   }

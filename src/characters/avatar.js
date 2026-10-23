@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { BONES, buildDoll, nearestBone } from './rig.js';
-import { parseVRM, disposeVRM } from './loaders.js';
+import { parseVRM, disposeVRM, releaseVRMFile } from './loaders.js';
 import { prepareMToonWet, applyMToonWet, patchWeather } from '../engine/materials.js';
 import { clamp, damp, rand } from '../core/util.js';
 
@@ -471,6 +471,9 @@ export class Avatar {
       m.removeFromParent();
       m.geometry?.dispose();
     }
+    // the outfit's materials and textures live on the GPU until disposed
+    for (const m of this.outfit.materials) disposeMaterial(m);
+    releaseVRMFile(this.outfit.buffer);
     this.outfit = null;
   }
 
@@ -536,7 +539,7 @@ export class Avatar {
     // Outline meshes share the same skinned mesh in three-vrm (multi-material groups), so they come along.
     // Free the parts we did not take (materials/textures may be shared, so only geometry).
     ovrm.scene.traverse((o) => { if (o.isMesh) o.geometry?.dispose(); });
-    this.outfit = { assetId, meshes: taken, materials };
+    this.outfit = { assetId, meshes: taken, materials, buffer: ovrm.userData?.fileBuffer || null };
     this._slots = null;
     this._refreshMaterials();
     return { taken: taken.length, parts: allParts };
@@ -544,7 +547,18 @@ export class Avatar {
 
   dispose() {
     this.removeOutfit();
+    // original textures set aside while a custom texture is shown
+    for (const m of this.materials || []) { m.userData.origMap?.map?.dispose(); m.userData.origMap?.shade?.dispose(); }
     if (this.vrm) disposeVRM(this.vrm);
     this.root.removeFromParent();
   }
+}
+
+/** Free a material and the textures it holds (shared ones are re-uploaded if used again). */
+function disposeMaterial(m) {
+  if (!m) return;
+  for (const v of Object.values(m)) if (v?.isTexture) v.dispose();
+  m.userData?.origMap?.map?.dispose();
+  m.userData?.origMap?.shade?.dispose();
+  m.dispose();
 }

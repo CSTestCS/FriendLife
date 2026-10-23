@@ -13,6 +13,8 @@ import { defaultVoice, normVoice, stylizeLine } from '../engine/voice.js';
 import { mishapLook, underdressedToLeave, underwearLeaveRate } from './outfits.js';
 import { priorLabel } from './relations.js';
 
+const SPARE_BODIES = 1; // cached outfit bodies per resident
+
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _p = new THREE.Vector3();
@@ -169,11 +171,11 @@ export class Resident {
         }
       }
     }
-    // swap in; keep the previous body cached so switching outfits back is instant
+    // swap in; keep the previous body (just one: a VRM body is big) so switching back is instant
     if (this.avatar && this.avatar !== avatar) {
       this.avatar.root.removeFromParent();
       this.avatarCache.set(this.avatarKey, this.avatar);
-      while (this.avatarCache.size > 3) {
+      while (this.avatarCache.size > SPARE_BODIES) {
         const [oldKey, old] = this.avatarCache.entries().next().value;
         this.avatarCache.delete(oldKey);
         old.dispose();
@@ -696,14 +698,21 @@ export class Resident {
     this.group.position.y = damp(this.group.position.y, this.groundY, 16, dt);
     // only residents the camera can actually see are rendered and fully animated
     // (the scene being shown: the island, or the room being looked into)
-    if (this.inView) {
+    // far from the camera: pose / IK / hair physics every other frame (small on screen)
+    this.lodSkip = this.inView && this.camDist > 32 && !this.lodSkip;
+    if (this.lodSkip) {
+      this.player.update(dt); // animation time keeps going
+      this.lodDt = dt;
+    } else if (this.inView) {
       const pose = this.player.update(dt);
-      this._applyLookAt(pose, dt);
+      const adt = dt + (this.lodDt || 0); // expressions / spring bones catch up on the skipped frame
+      this.lodDt = 0;
+      this._applyLookAt(pose, adt);
       this.avatar.applyPose(pose);
       const ik = !this.seat && !this.ko && !NO_IK.has(this.player.action) && sim.settings.ik !== false;
-      this.avatar.solveFootIK((x, z) => this.space.heightAt(x, z), this.group.position.y, ik, dt);
-      this.avatar.update(dt);
-      this._updateAttachments(dt);
+      this.avatar.solveFootIK((x, z) => this.space.heightAt(x, z), this.group.position.y, ik, adt);
+      this.avatar.update(adt);
+      this._updateAttachments(adt);
     } else {
       // keep animation time (and end-of-clip callbacks) going, skip posing / IK / spring bones
       this.player.update(dt);

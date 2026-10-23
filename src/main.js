@@ -124,7 +124,7 @@ class App {
     const r = this.stage.renderer;
     r.shadowMap.enabled = !!st.shadows;
     this.stage.sun.castShadow = !!st.shadows;
-    r.setPixelRatio(st.quality === 'low' ? 0.75 : Math.min(window.devicePixelRatio, 2));
+    r.setPixelRatio(st.quality === 'low' ? 0.75 : Math.min(window.devicePixelRatio, 1.5));
     this.stage.resize();
     this.stage.scene.traverse((o) => { if (o.material) { const mats = Array.isArray(o.material) ? o.material : [o.material]; mats.forEach((m) => { m.needsUpdate = true; }); } });
   }

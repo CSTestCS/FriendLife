@@ -8,6 +8,7 @@ import {
   makeFountain, makeBeachUmbrella, makePier, makeStage, makeFence, BUILD_CATALOG, nightMaterials, makeLabelTexture, makeCondo,
 } from './props.js';
 import { rand, uid } from '../core/util.js';
+import { bakeStatic } from '../engine/batch.js';
 
 export const ISLAND_RADIUS = 44;
 export const WATER_Y = -0.55;
@@ -317,6 +318,16 @@ export class Island {
     }
     for (const o of this.condoReserve) this.obstacles.splice(this.obstacles.indexOf(o), 1);
     this.condoReserve = [];
+
+    // merge the static scenery (trees, lamps, paths, stage, pier…) into a few meshes;
+    // buildings are merged one by one so they can still be clicked
+    const buildings = new Set(Object.values(this.locations).map((l) => l.building).filter(Boolean));
+    for (const b of buildings) bakeStatic(b);
+    const decor = new THREE.Group();
+    decor.name = 'staticDecor';
+    this.group.add(decor);
+    const parts = this.group.children.filter((o) => o !== decor && o !== this.ground && o !== this.water && !buildings.has(o));
+    bakeStatic(this.group, { parts, into: decor });
   }
 
   /** Show / hide the condo tower (only there while someone lives in it). */
@@ -327,6 +338,7 @@ export class Island {
     if (on) {
       if (!this.condoObj) {
         this.condoObj = makeCondo();
+        bakeStatic(this.condoObj);
         this.condoObj.position.set(c.x, 0, c.z);
         this.condoObj.rotation.y = c.rot;
       }
@@ -409,6 +421,7 @@ export class Island {
     if (slot.obj) { this.group.remove(slot.obj); }
     const [wall, roof] = HOUSE_COLORS[slot.index % HOUSE_COLORS.length];
     const obj = makeHouse({ wall, roof, name });
+    bakeStatic(obj);
     obj.position.set(slot.x, 0, slot.z);
     obj.rotation.y = slot.rot;
     this.group.add(obj);
@@ -447,6 +460,7 @@ export class Island {
     const def = BUILD_CATALOG.find((d) => d.type === type);
     if (!def) return null;
     const obj = def.make();
+    bakeStatic(obj);
     obj.position.set(x, terrainHeight(x, z), z);
     obj.rotation.y = rot;
     this.group.add(obj);

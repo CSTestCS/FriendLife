@@ -153,7 +153,7 @@ export function stdMat(color, opts = {}) {
     opacity: opts.opacity ?? 1,
   });
   patchWeather(m, opts);
-  if (!opts.unique) matCache.set(key, m);
+  if (!opts.unique) { m.userData.shared = true; matCache.set(key, m); }
   return m;
 }
 

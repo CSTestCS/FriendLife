@@ -8,6 +8,7 @@
 // The player can look into any room and redecorate it.
 
 import * as THREE from 'three';
+import { bakeStatic } from '../engine/batch.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { stdMat } from '../engine/materials.js';
 import { makeLabelTexture } from './props.js';
@@ -234,7 +235,20 @@ export class Room {
 
   async build() {
     const g = this.group;
-    for (const c of [...g.children]) { g.remove(c); c.traverse?.((o) => { if (o.isMesh) o.geometry.dispose(); }); }
+    // free the old furniture: geometry, plus materials / label textures made just for this room
+    const keep = new Set([this.windowMat, this.lampMat]);
+    for (const c of [...g.children]) {
+      g.remove(c);
+      c.traverse?.((o) => {
+        if (!o.isMesh) return;
+        o.geometry.dispose();
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (!m || m.userData.shared || keep.has(m)) continue;
+          m.map?.dispose();
+          m.dispose();
+        }
+      });
+    }
     this.obstacles = [];
     this.platforms = [];
     const st = this.style;
@@ -539,6 +553,10 @@ export class Room {
         }
       }
     }
+    // one mesh per material instead of hundreds of boxes
+    if (this.water) this.water.userData.noBatch = true;
+    this.rainOverlay.userData.noBatch = true;
+    bakeStatic(g);
   }
 
   heightAt(x, z) {
@@ -722,6 +740,8 @@ export class RoomManager {
   }
 
   focus(room) {
+    // only the room being looked at is drawn
+    for (const r of this.rooms.values()) r.group.visible = r === room;
     this.light.position.set(room.ox + 3, 7, 6);
     this.light.target.position.set(room.ox, 0, 0);
     const c = this.light.shadow.camera;

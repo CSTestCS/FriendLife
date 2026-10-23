@@ -91,6 +91,7 @@ export function makeHouse({ wall = '#f4e7d3', roof = '#c4574a', door = '#7a4b33'
     s.position.set(0, 2.02, 1.54);
     g.add(s);
     g.userData.nameSign = s;
+    s.userData.noBatch = true;
   }
   shadowAll(g);
   return g;
@@ -351,6 +352,7 @@ export function makeFountain() {
   spray.scale.set(1, 0.6, 1);
   g.add(spray);
   g.userData.spray = spray;
+  spray.userData.noBatch = true;
   shadowAll(g);
   water.castShadow = false;
   return g;

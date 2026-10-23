@@ -613,6 +613,7 @@ export class Sim extends Emitter {
         r.avatar.update(0);
       }
       r.inView = inView;
+      r.camDist = inView ? cam.position.distanceTo(r.group.position) : Infinity;
       if (r.avatar.root.visible !== inView) r.avatar.root.visible = inView;
     }
   }
