@@ -149,20 +149,72 @@ export class Sim extends Emitter {
   /** Which personal outfit fits the moment (see outfits.js for the conditions). */
   preferredOutfit(res) { return preferredOutfit(res, this); }
 
-  /** Change into whatever fits the situation right now (if auto-outfits are on). */
-  autoDress(res, { quiet = false, force = false } = {}) {
-    if (!force && (!this.settings.autoOutfits || res.d.autoOutfits === false)) return null;
+  /**
+   * Change clothes. Only call this when the resident is standing at their own
+   * wardrobe (closet spot at home). index = a specific outfit, otherwise the
+   * one that fits ctx ({activity, outside}). Fresh clothes also fix a mishap.
+   */
+  dressAtWardrobe(res, { index = null, ctx = {}, quiet = true } = {}) {
+    if (res.d.mishap && !res.d.mishap.owned) { res.d.mishap = null; if (res.d.problem?.type === 'mishap') { res.d.problem = null; this.emit('problem', res); } res.applyLook(); }
     if (!res.d.outfits?.length || !res.avatar) return null;
-    if (res.changing) { res.redress = { quiet, force }; return null; } // check again once this change is done
-    const want = preferredOutfit(res, this);
+    const want = index ?? preferredOutfit(res, this, ctx);
     if (want === res.d.wearing) return null;
+    if (res.changing) { res.redress = { index: want, quiet }; return null; }
     res.changing = true;
     return this.changeOutfit(res, want, { quiet }).finally(() => {
       res.changing = false;
       const again = res.redress;
       res.redress = null;
-      if (again) this.autoDress(res, again);
+      if (again && again.index !== res.d.wearing) this.changeOutfit(res, again.index, { quiet: again.quiet });
     });
+  }
+
+  /** Would the resident wear something else for this? (outfit index or null) */
+  outfitFor(res, ctx) {
+    if (!res.d.outfits?.length) return null;
+    const want = preferredOutfit(res, this, { outside: true, ...ctx });
+    return want === res.d.wearing ? null : want;
+  }
+
+  /**
+   * Go home to the wardrobe and change. after() runs once they're back
+   * outside (e.g. carry on to the beach). Returns false if they can't.
+   */
+  goChange(res, { index = null, activity, after = null, say = true, stay = false } = {}) {
+    if (!this.homeOf(res) || res.engaged || res.ko || res.inWater) return false;
+    const home = res.homeKey;
+    res.errand = { kind: 'dress', index, activity, after, leave: !stay };
+    if (activity !== undefined) res.activity = activity;
+    res.lastDressTrip = this.clock;
+    if (res.inside === home) { res.clearPlan(); return true; }
+    if (say && !res.inside) res.say(pick(['Be right back, gotta change!', 'Time to get changed!', 'Wrong outfit for this... home first!', 'Let me grab something else to wear.']), { emoji: '👕' });
+    res.clearPlan();
+    if (res.inside && this.rooms && (this.rooms.parentOf(res.inside) || this.rooms.chain(home).length > 1)) {
+      res.enter(home, 20); // walks out / through the condo
+      res.onExit = after;
+      return true;
+    }
+    if (res.inside) res.exit();
+    const door = this.locationDoor(home, res);
+    if (!door) { res.errand = null; return false; }
+    res.setPlan([{ kind: 'walk', x: door[0], z: door[1] }, { kind: 'enter', loc: home, minutes: 20, onExit: after }]);
+    return true;
+  }
+
+  /**
+   * Before an activity: if they'd wear something else for it (swimwear,
+   * work clothes…), go change first and then do it. Returns true if they went.
+   */
+  dressFirst(res, activity, after, bother = 1) {
+    if (this.settings.autoOutfits === false || res.d.autoOutfits === false) return false;
+    if (this.outfitFor(res, { activity }) == null || !chance(bother)) return false;
+    return this.goChange(res, { activity, after });
+  }
+
+  /** Old name kept for callers: change only if already at the wardrobe at home. */
+  autoDress(res, opts = {}) {
+    if (res.inside === res.homeKey && res.seat?.type === 'closet') return this.dressAtWardrobe(res, opts);
+    return null;
   }
 
   removeResident(res) {
@@ -613,8 +665,15 @@ export class Sim extends Emitter {
     if (this.outfitTimer <= 0 && this.settings.autoOutfits) {
       this.outfitTimer = 6;
       for (const r of this.residents) {
-        if (r.engaged || r.ko || r.moving || r.seat || (r.inside && !r.room)) continue;
-        this.autoDress(r);
+        if (r.d.autoOutfits === false || !r.d.outfits?.length || r.engaged || r.ko || r.inWater || r.errand || r.sleeping || r.morningPending) continue;
+        if ((r.d.manualUntil || 0) > this.clock || r.d.mishap?.owned) continue;
+        if (r.inside === r.homeKey) {
+          // at home: wander over to the wardrobe when what they wear doesn't fit any more
+          if (!r.route && !r.leaving && preferredOutfit(r, this) !== r.d.wearing) r.errand = { kind: 'dress', index: null, leave: false };
+        } else if (!r.inside && !r.moving && !r.seat && !r.working && !r.activity && this.clock - (r.lastDressTrip ?? -1e9) > 90) {
+          // out and about in the "wrong" clothes (rain started, still in swimwear…): sometimes go home to change
+          if (this.outfitFor(r, {}) != null && chance(0.3)) this.goChange(r, {});
+        }
       }
     }
     this.swim.perMinute(min);

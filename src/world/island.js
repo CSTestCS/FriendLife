@@ -515,7 +515,31 @@ export class Island {
   // ---- water (swimming) ----
   /** Water surface height where it is deep enough to swim, else null. */
   waterAt(x, z) {
-    return terrainHeight(x, z) < SWIM_DEPTH ? WATER_Y : null;
+    if (terrainHeight(x, z) >= SWIM_DEPTH || this.onPlatform(x, z)) return null; // the pier stands over the water
+    return WATER_Y;
+  }
+
+  onPlatform(x, z) {
+    for (const p of this.platforms || []) {
+      const dx = x - p.x, dz = z - p.z;
+      const c = Math.cos(p.rot), s = Math.sin(p.rot);
+      if (Math.abs(dx * c - dz * s) <= p.hw && Math.abs(dx * s + dz * c) <= p.hd) return true;
+    }
+    return false;
+  }
+
+  /** A walkable platform that stands over the sea (the pier). */
+  overWater(x, z) {
+    return this.onPlatform(x, z) && terrainHeight(x, z) < -0.45;
+  }
+
+  /** Walk onto the pier from the beach end (so nobody swims round to the tip). */
+  pierWaypoints() {
+    const pi = this.pierInfo;
+    if (!pi) return [];
+    const near = this.localToWorld(pi.start.x, pi.start.z, pi.rot, 0, -0.6);
+    const on = this.localToWorld(pi.start.x, pi.start.z, pi.rot, 0, 1.2);
+    return [near, on];
   }
 
   /** A spot on the beach right at the water's edge. */

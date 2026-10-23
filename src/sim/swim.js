@@ -41,7 +41,7 @@ export class SwimManager {
     const n = res.d.needs;
     res.setPlan([
       { kind: 'walk', x: shore.x, z: shore.z },
-      { kind: 'call', fn: () => { res.activity = 'swim'; sim.autoDress(res, { quiet: true }); } },
+      { kind: 'call', fn: () => { res.activity = 'swim'; } },
       { kind: 'anim', anim: 'stretch', dur: 2.5, heading: shore.heading, say: pick(['Swim time!', 'Last one in is a rotten egg!', 'The water looks great!', 'Cannonball!']), emoji: '🏊' },
       { kind: 'walk', x: spots[0].x, z: spots[0].z },
       { kind: 'anim', anim: chance(0.5) ? 'float' : 'tread', dur: rand(6, 12), expr: { relaxed: 0.8 } },
@@ -54,7 +54,6 @@ export class SwimManager {
         n.fun = clamp(n.fun + 25, 0, 100);
         n.energy = clamp(n.energy - 8, 0, 100);
         res.emote('😄', 2);
-        sim.autoDress(res, { quiet: true });
       } },
     ]);
   }

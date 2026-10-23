@@ -28,7 +28,14 @@ export function closetSection(app, res, rerender) {
       h('span', {}, wearing ? '👗' : '▫️'),
       h('span', {}, h('b', {}, label), sub ? h('span', { class: 'hint' }, ` ${sub}`) : null),
       h('span', { class: 'row', style: { gap: '4px' } },
-        wearing ? h('span', { class: 'tag good' }, 'wearing') : h('button', { class: 'small primary', onclick: async () => { toast(`Changing ${res.name}…`); await sim.changeOutfit(res, idx); sim.problems.newLook(res); rerender(); } }, 'Wear'),
+        wearing ? h('span', { class: 'tag good' }, 'wearing') : h('button', { class: 'small primary', onclick: () => {
+          // clothes live in the wardrobe at home: they go there to change
+          res.d.manualUntil = sim.clock + 180;
+          if (sim.goChange(res, { index: idx, stay: res.inside === res.homeKey })) toast(`${res.name} heads to their wardrobe to change.`);
+          else toast(`${res.name} can't change right now.`);
+          sim.problems.newLook(res);
+          rerender();
+        } }, 'Wear'),
         idx >= 0 || outfits.length ? h('button', { class: 'small', title: 'Edit settings', onclick: () => editOutfit(app, res, idx, rerender) }, '✏') : null,
       ));
   };

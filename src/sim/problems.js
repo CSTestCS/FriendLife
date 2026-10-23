@@ -101,8 +101,9 @@ export const PROBLEM_DEFS = {
 };
 
 function r_home(sim, res) {
-  sim.sendTo(res, res.homeKey, rand(15, 25), () => fixMishap(sim, res, true));
-  return true;
+  // back to the wardrobe for fresh clothes (that fixes it)
+  if (res.d.mishap) res.d.mishap.owned = false;
+  return sim.goChange(res, {});
 }
 
 export class Problems {

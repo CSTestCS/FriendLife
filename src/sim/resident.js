@@ -415,7 +415,18 @@ export class Resident {
   /** Walk (or run) to a point, avoiding buildings. Returns a promise-like flag object. */
   moveTo(x, z, opts = {}) {
     this.leaveSeat();
-    const path = this.space.isRoom ? gridPath(this.space, this.x, this.z, x, z) : planPath(this.x, this.z, x, z, this.space.obstacles);
+    let path = this.space.isRoom ? gridPath(this.space, this.x, this.z, x, z) : planPath(this.x, this.z, x, z, this.space.obstacles);
+    // the pier: get on and off at the beach end instead of wading round it
+    const isl = this.space.isRoom ? null : this.space;
+    if (isl?.overWater) {
+      const fromPier = isl.overWater(this.x, this.z);
+      const toPier = isl.overWater(x, z);
+      if (fromPier !== toPier) {
+        const [near, on] = isl.pierWaypoints();
+        if (near && fromPier) path = [{ x: on.x, z: on.z }, { x: near.x, z: near.z }, ...planPath(near.x, near.z, x, z, isl.obstacles)];
+        else if (near) path = [...planPath(this.x, this.z, near.x, near.z, isl.obstacles), { x: on.x, z: on.z }, { x, z }];
+      }
+    }
     this.path = path;
     this.moving = { x, z, run: !!opts.run, stopDist: opts.stopDist ?? 0.15, onArrive: opts.onArrive || null, anim: opts.anim || null, speed: opts.speed || null, done: false };
     return this.moving;
@@ -574,7 +585,12 @@ export class Resident {
     // indoors: time to leave? (nested rooms are walked out of by the room brain)
     if (this.inside) {
       if (!this.engaged && sim.clock >= this.insideUntil) {
-        if (this.room && sim.rooms?.parentOf(this.inside)) {
+        if (this.inside === this.homeKey && this.room && (this.sleeping || this.morningPending || this.activity === 'sleep' || this.errand)) {
+          // never head out still half asleep / mid-change: finish getting ready first
+          if (this.sleeping && !(this.wakeAt <= sim.clock)) this.wakeAt = sim.clock;
+          if (this.activity === 'sleep' && !this.sleeping) this.morningPending = true;
+          this.insideUntil = sim.clock + 20;
+        } else if (this.room && sim.rooms?.parentOf(this.inside)) {
           this.leaving = true;
           this.insideUntil = Infinity;
         } else {

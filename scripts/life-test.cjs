@@ -92,6 +92,78 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     await ev(() => { window.__friendlife.sim.speed = 1; });
   }
 
+  if (run('wardrobe')) {
+    // ---- the pier is solid ground again; fishers stay dry
+    await ev(() => {
+      const s = window.__friendlife.sim;
+      s.clock = Math.floor(s.clock / 1440) * 1440 + 9 * 60;
+      const f = s.residents[1];
+      s.social.cancelFor(f); f.engaged = null; f.ko = false; if (f.inside) f.exit(); f.clearPlan();
+      f.d.problem = null;
+      s.problems.offer(f, 'wantJob', {});
+      s.problems.solve(f, 'pick', { job: 'fisher' });
+      f.d.job.dayOff = (s.day + 3) % 7;
+      f.d.job.start = 0; f.d.job.end = 24;
+      f.placeAt(0, 30);
+      window.__fisher = f;
+      window.__wet = 0;
+      s.speed = 4;
+    });
+    let atTip = false;
+    for (let i = 0; i < 200 && !atTip; i++) {
+      await wait(1000);
+      const st = await ev(() => { const s = window.__friendlife.sim; const f = window.__fisher; if (f.inWater) window.__wet++; const p = s.locations.pier; return { d: Math.hypot(f.x - p.x, f.z - p.z), wet: window.__wet, y: f.group.position.y, working: f.working }; });
+      if (st.d < 1.2) atTip = st;
+      if (i % 50 === 49) console.log('  fisher', await ev(() => { const f = window.__fisher; return JSON.stringify({ x: f.x.toFixed(1), z: f.z.toFixed(1), plan: f.plan.map((p) => p.kind), step: f.step?.kind, eng: f.engaged?.kind, in: f.inside, act: f.player.action, job: f.d.job?.id, working: f.working }); }));
+    }
+    check('fisher reaches the pier tip without swimming', atTip && atTip.wet === 0 && atTip.y > 0.2, JSON.stringify(atTip));
+    // ---- changing clothes happens at the wardrobe at home
+    await ev(() => {
+      const s = window.__friendlife.sim;
+      s.speed = 4;
+      s.clock = Math.floor(s.clock / 1440) * 1440 + 12 * 60;
+      const r = s.residents[4];
+      s.social.cancelFor(r); r.engaged = null; r.ko = false; if (r.inside) r.exit(); r.clearPlan();
+      const cur = JSON.parse(JSON.stringify(r.appearance()));
+      r.d.outfits = [{ name: 'Swimsuit', look: cur.look || r.d.look, outfit: null, custom: { textures: {}, tints: {}, hidden: [] }, tags: ['swim'] }];
+      r.d.wearing = -1;
+      r.d.waterFear = 0;
+      const home = s.homeOf(r);
+      r.placeAt(home.door[0] + 3, home.door[1] + 3);
+      window.__swimmer = r;
+      window.__log = [];
+      // what the brain does when it picks "swim"
+      if (!s.dressFirst(r, 'swim', () => s.swim.planSwim(r))) s.swim.planSwim(r);
+    });
+    let changedAtHome = false, swam = false, changedOutside = false;
+    for (let i = 0; i < 300 && !(changedAtHome && swam); i++) {
+      await wait(1000);
+      const st = await ev(() => { const r = window.__swimmer; return { in: r.inside, home: r.inside === r.homeKey, w: r.d.wearing, water: r.inWater, seat: r.seat?.type }; });
+      if (st.w === 0 && st.home) changedAtHome = true;
+      if (st.w === 0 && !st.in && !changedAtHome) changedOutside = true;
+      if (st.water && st.w === 0) swam = true;
+    }
+    check('goes home to the wardrobe for swimwear', changedAtHome && !changedOutside, JSON.stringify({ changedAtHome, changedOutside }));
+    check('then goes swimming in it', swam);
+    // ---- someone points out a mishap
+    const told = await ev(async () => {
+      const s = window.__friendlife.sim;
+      const [a, b] = s.residents.filter((r) => !r.inside && !r.engaged && !r.ko && r !== window.__swimmer).slice(0, 2);
+      for (const x of [a, b]) { s.social.cancelFor(x); x.clearPlan(); }
+      b.placeAt(a.x + 1.2, a.z);
+      a.d.mishap = null;
+      a.d.problem = null;
+      const { causeMishap } = window.__friendlife.outfits || {};
+      a.d.mishap = { type: 'shoes', at: s.clock, noticed: false };
+      a.applyLook();
+      for (let i = 0; i < 60 && !a.d.mishap?.telling && !a.d.mishap?.noticed; i++) s.perMinute(1);
+      await new Promise((r) => setTimeout(r, 2500));
+      return { telling: !!a.d.mishap?.telling, noticed: !!a.d.mishap?.noticed || !a.d.mishap, goingToChange: a.errand?.kind === 'dress', asked: a.d.problem?.type };
+    });
+    check('mishap gets noticed / pointed out', told.noticed && (told.goingToChange || told.asked === 'mishap'), JSON.stringify(told));
+    await ev(() => { window.__friendlife.sim.speed = 1; });
+  }
+
   if (run('outfits')) {
     // ---- outfit conditions, random pick, perception, mishaps, routines
     const o = await ev(async () => {

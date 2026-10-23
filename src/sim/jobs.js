@@ -177,9 +177,10 @@ export function planOutdoorWork(res, sim) {
   const j = jobOf(res);
   const island = sim.island;
   const loc = sim.locations;
-  const work = (x, z, heading, minutes, after) => {
+  const work = (x, z, heading, minutes, after, via = []) => {
     const anim = pick(j.anims);
     res.setPlan([
+      ...via.map((p) => ({ kind: 'walk', x: p.x, z: p.z })),
       { kind: 'walk', x, z },
       { kind: 'call', fn: () => { res.working = true; } },
       { kind: 'anim', anim, dur: minutes, heading, expr: { happy: 0.3 } },

@@ -18,6 +18,15 @@ function swimWeight(res, sim) {
 
 export function think(res, sim) {
   if (res.plan.length || res.step || res.engaged || res.inside || res.ko || res.moving) return;
+  // on the way to the wardrobe but got side-tracked: carry on home
+  if (res.errand?.kind === 'dress') {
+    const door = sim.locationDoor(res.homeKey, res);
+    if (door) {
+      res.setPlan([{ kind: 'walk', x: door[0], z: door[1] }, { kind: 'enter', loc: res.homeKey, minutes: 20, onExit: res.errand.after }]);
+      return;
+    }
+    res.errand = null;
+  }
   if (res.activity && res.activity !== 'work' && !res.inWater) res.activity = null;
   const hour = sim.minuteOfDay / 60;
   const d = res.d;
@@ -64,12 +73,17 @@ export function think(res, sim) {
   // --- work shift
   const job = jobOf(res);
   if (job && isOnShift(res, sim) && n.energy > 12 && n.hunger > 18) {
+    // work clothes come from the wardrobe at home (once per shift)
+    if (res.workDressDay !== sim.day) {
+      res.workDressDay = sim.day;
+      if (sim.dressFirst(res, 'work', null)) return;
+    }
     if (job.indoor) {
       const door = sim.locationDoor(job.place, res);
       const minutes = Math.max(20, job.end * 60 - sim.minuteOfDay);
       if (door) {
         res.setPlan([
-          { kind: 'call', fn: () => { res.activity = 'work'; sim.autoDress(res, { quiet: true }); if (chance(0.3)) res.say(`Off to work! ${job.icon}`, { emoji: '💼' }); } },
+          { kind: 'call', fn: () => { res.activity = 'work'; if (chance(0.3)) res.say(`Off to work! ${job.icon}`, { emoji: '💼' }); } },
           { kind: 'walk', x: door[0], z: door[1] },
           { kind: 'enter', loc: job.place, minutes, onExit: () => { res.activity = null; } },
         ]);
@@ -77,7 +91,7 @@ export function think(res, sim) {
       }
     }
     if (!job.indoor && planOutdoorWork(res, sim)) {
-      if (res.activity !== 'work') { res.activity = 'work'; sim.autoDress(res, { quiet: true }); }
+      res.activity = 'work';
       return;
     }
   }
@@ -184,7 +198,8 @@ export function think(res, sim) {
       return;
     }
     case 'swim': {
-      sim.swim.planSwim(res);
+      // swimwear first (from the wardrobe at home), then the beach
+      if (!sim.dressFirst(res, 'swim', () => sim.swim.planSwim(res))) sim.swim.planSwim(res);
       return;
     }
     case 'sea': {
@@ -196,11 +211,12 @@ export function think(res, sim) {
       break;
     }
     case 'dance': {
+      if (sim.dressFirst(res, 'dance', null, 0.5)) return;
       const spot = island.stageSpot();
       res.setPlan([
         { kind: 'walk', x: spot.entry[0], z: spot.entry[1] },
         { kind: 'walk', x: spot.x, z: spot.z },
-        { kind: 'call', fn: () => { res.activity = 'dance'; sim.autoDress(res, { quiet: true }); } },
+        { kind: 'call', fn: () => { res.activity = 'dance'; } },
         { kind: 'anim', anim: 'dance', dur: rand(10, 18), heading: spot.heading, expr: { happy: 1 }, say: line('dance'), emoji: '🎵' },
         { kind: 'call', fn: () => { res.activity = null; } },
       ]);
@@ -208,10 +224,11 @@ export function think(res, sim) {
       return;
     }
     case 'exercise': {
+      if (sim.dressFirst(res, 'exercise', null, 0.5)) return;
       const p = island.randomPoint(6, 20);
       res.setPlan([
         { kind: 'walk', x: p.x, z: p.z },
-        { kind: 'call', fn: () => { res.activity = 'exercise'; sim.autoDress(res, { quiet: true }); } },
+        { kind: 'call', fn: () => { res.activity = 'exercise'; } },
         { kind: 'anim', anim: 'exercise', dur: rand(8, 14), expr: { happy: 0.4 }, emoji: '💪' },
         { kind: 'call', fn: () => { if (chance(0.02)) causeMishap(sim, res, 'seam'); res.activity = null; } },
       ]);
@@ -275,6 +292,7 @@ export function think(res, sim) {
     }
     case 'pool': {
       const door = sim.locationDoor('condoPool', res);
+      if (door && sim.dressFirst(res, 'swim', () => { const d = sim.locationDoor('condoPool', res); if (d) res.setPlan([{ kind: 'walk', x: d[0], z: d[1] }, { kind: 'enter', loc: 'condoPool', minutes: rand(30, 60), onExit: () => { res.activity = null; } }]); })) return;
       if (door) {
         res.setPlan([
           { kind: 'call', fn: () => { if (chance(0.4)) res.say('Pool day! 🏊', { emoji: '🏊' }); } },

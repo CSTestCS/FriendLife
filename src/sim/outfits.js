@@ -69,26 +69,32 @@ export function outfitMeta(res, idx) {
 }
 
 /** Which conditions are true for this resident right now (in priority order). */
-export function activeConditions(res, sim) {
+/**
+ * ctx lets the resident plan ahead at their wardrobe:
+ *   { activity: 'swim' | 'work' | …, outside: true } = "what do I wear for that, once I'm out?"
+ */
+export function activeConditions(res, sim, ctx = {}) {
   const hour = sim.minuteOfDay / 60;
   const w = sim.weather;
-  const act = res.player?.action;
+  const act = ctx.activity !== undefined ? null : res.player?.action;
+  const activity = ctx.activity !== undefined ? ctx.activity : res.activity;
+  const inside = ctx.outside ? null : res.inside;
   const own = res.homeKey;
   const on = {
-    swim: !!(res.inWater || res.activity === 'swim'),
-    sleep: res.activity === 'sleep',
-    work: !!(res.working || res.activity === 'work'),
-    exercise: act === 'exercise' || res.activity === 'exercise',
-    party: act === 'dance' || res.activity === 'dance',
-    date: res.engaged?.kind === 'date',
-    visiting: !!res.inside && res.inside.startsWith('home:') && res.inside !== own,
-    home: !!res.inside && res.inside === own,
+    swim: !!((ctx.activity === undefined && res.inWater) || activity === 'swim'),
+    sleep: activity === 'sleep',
+    work: !!((ctx.activity === undefined && res.working) || activity === 'work'),
+    exercise: act === 'exercise' || activity === 'exercise',
+    party: act === 'dance' || activity === 'dance',
+    date: activity === 'date' || (ctx.activity === undefined && res.engaged?.kind === 'date'),
+    visiting: !!inside && inside.startsWith('home:') && inside !== own,
+    home: !!inside && inside === own,
     snow: !!w.snowing,
     rain: !!w.raining,
     night: hour >= 19 || hour < 5,
     morning: hour >= 5 && hour < 10,
     sunny: w.type === 'sunny' || w.type === 'partly',
-    out: !res.inside,
+    out: !inside,
   };
   return OUTFIT_CONDITIONS.map(([k]) => k).filter((k) => on[k]);
 }
@@ -98,12 +104,12 @@ export function activeConditions(res, sim) {
  * tagged with wins; several matching outfits → a random one (the current one
  * is kept if it still matches). Nothing matches → main look.
  */
-export function preferredOutfit(res, sim) {
+export function preferredOutfit(res, sim, ctx = {}) {
   const n = res.d.outfits?.length || 0;
   if (!n) return -1;
   if (res.d.mishap?.type === 'pajamas') return res.d.wearing; // forgot to change…
   const all = [-1, ...Array.from({ length: n }, (_, i) => i)];
-  const active = new Set([...activeConditions(res, sim), 'default']);
+  const active = new Set([...activeConditions(res, sim, ctx), 'default']);
   // most specific tier first; within a tier every outfit that fits is a candidate
   for (const tier of CONDITION_TIERS) {
     const conds = tier.filter((c) => active.has(c));
@@ -298,21 +304,46 @@ export function causeMishap(sim, res, type, { quiet = false } = {}) {
 }
 
 /** Mishaps that weren't noticed yet get noticed after a while (or when someone laughs). */
+const TELL = {
+  pajamas: ['Psst... you\'re still in your pajamas!', 'Uh, nice PJs? Did you forget to get dressed?', 'Pfft! Pajama day?'],
+  shoes: ['Hey, where are your shoes?', 'Um... you\'re barefoot!', 'Forgot something? Like... shoes?'],
+  torn: ['Your clothes are all ripped!', 'Yikes, your outfit got torn up!'],
+  seam: ['Psst... your seam split.', 'Um, there\'s a rip in your pants...'],
+  stain: ['You\'ve got a big stain there!', 'Oops, you spilled on yourself!'],
+  inside: ['Your shirt\'s inside out!', 'Hehe, inside-out shirt?'],
+};
+
+function notice(sim, r, by = null) {
+  const m = r.d.mishap;
+  m.noticed = true;
+  if (!r.engaged) {
+    r.say(by ? pick(['Wh-what?! Oh no!', 'Oh no... thanks for telling me!', 'NO WAY. How embarrassing!']) : MISHAPS[m.type].line, { emoji: MISHAPS[m.type].icon });
+    r.setEmotion('shy', 40);
+  }
+  if (by) { r.changeRel(by.id, 1); }
+  // most head straight home to change; otherwise they ask you what to do
+  if (!r.working && !r.engaged && !r.ko && chance(0.65) && sim.goChange(r, { say: false })) return;
+  sim.problems.offer(r, 'mishap', {});
+}
+
+/** Mishaps get noticed: someone points it out, or they spot it themselves. */
 export function updateMishaps(sim, min) {
   for (const r of sim.residents) {
     const m = r.d.mishap;
     if (!m) continue;
-    if (!m.noticed && (sim.clock - m.at > rand(40, 140) || (!r.inside && chance(0.01 * min)))) {
-      m.noticed = true;
-      if (!r.engaged) {
-        r.say(MISHAPS[m.type].line, { emoji: MISHAPS[m.type].icon });
-        r.setEmotion('shy', 40);
-        if (!r.plan.length && !r.inside) r.setPlan([{ kind: 'anim', anim: 'shocked', dur: 1.2 }, { kind: 'anim', anim: 'shy', dur: 2 }]);
-      }
-      sim.problems.offer(r, 'mishap', {});
+    if (!m.noticed && !m.telling && !r.engaged && !r.sleeping) {
+      // others are quick to point it out
+      const near = sim.residents.filter((o) => o !== r && !o.engaged && !o.ko && !o.sleeping && (o.inside || null) === (r.inside || null) && sim.dist(o, r) < 7);
+      if (near.length && chance(0.1 * min)) {
+        const o = pick(near);
+        o.faceTo(r.x, r.z);
+        o.say(pick(TELL[m.type] || ['Um... your outfit?']), { emoji: '👀' });
+        setTimeout(() => { if (r.d.mishap === m && !m.noticed) notice(sim, r, o); }, 1500);
+        m.telling = true;
+      } else if (sim.clock - m.at > 50 || (!r.inside && chance(0.02 * min))) notice(sim, r);
     }
-    // mishaps fix themselves eventually (they change at home / at night)
-    if (sim.clock - m.at > 10 * 60 || (r.inside === r.homeKey && sim.clock - m.at > 45 && m.noticed && chance(0.02 * min))) fixMishap(sim, r, true);
+    // a mishap nobody fixed wears off eventually (they change at home / at night)
+    if (sim.clock - m.at > 8 * 60) fixMishap(sim, r, true);
   }
 }
 
@@ -322,7 +353,7 @@ export function fixMishap(sim, res, quiet = false) {
   res.d.mishap = null;
   if (res.d.problem?.type === 'mishap') res.d.problem = null;
   res.applyLook();
-  if (wasPajamas) sim.autoDress?.(res, { quiet: true, force: true });
+  if (wasPajamas) sim.goChange?.(res, { say: false });
   if (!quiet) res.say('Phew, all fixed!', { emoji: '✨' });
   sim.emit('resident', res);
 }
