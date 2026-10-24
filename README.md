@@ -2,7 +2,7 @@
 
 An island life sim inspired by *Tomodachi Life: Living the Dream* — but the residents are **your VRoid / VRM avatars** instead of Miis.
 
-Residents live on a little island with houses, a café, a shop, a clinic, a park, a stage, a beach and a pier. They eat, sleep, wander, chat, make friends, fall in love, gossip, argue, prank each other, get jealous, hold grudges — and sometimes actually **fight**, get **hurt**, and end up at the clinic. **Dynamic weather** changes through the day: rain makes everything (and everyone) **wet and glossy**, puddles and ripples form, thunderstorms flash and rumble, snow piles up.
+Residents live in a condo tower on a little island with a café, a shop, a clinic, a park, a stage, a beach, a pier and venues to build (hot spring, basketball court, playground, campfire and more). They eat, sleep, wander, chat, make friends, fall in love, gossip, argue, prank each other, get jealous, hold grudges — and sometimes actually **fight**, get **hurt**, and end up at the clinic. **Dynamic weather** changes through the day: rain makes everything (and everyone) **wet and glossy**, puddles and ripples form, thunderstorms flash and rumble, snow piles up.
 
 > Fan project. Not affiliated with Nintendo. No Nintendo assets are used.
 
@@ -61,13 +61,27 @@ Injuries: bruises, black eyes, split lips, broken noses, sprained ankles (reside
 
 ### Rooms (interiors)
 
-Every house — plus the café, shop and clinic — has its own **room instance**. When residents go inside they really are inside: sleeping in bed, lounging on the sofa, cooking, eating at the table, reading, changing at the wardrobe, browsing shop racks, waiting at the clinic, sitting at café tables, and working behind the counter. Friends **visit each other's houses** and chat (or argue — or brawl in the café) indoors.
+Every apartment — plus the café, shop and clinic — has its own **room instance**. When residents go inside they really are inside: sleeping in bed, lounging on the sofa, cooking, eating at the table, reading, changing at the wardrobe, browsing shop racks, waiting at the clinic, sitting at café tables, and working behind the counter. Friends **visit each other's apartments** and chat (or argue — or brawl in the café) indoors.
 
 Look inside by **clicking a building**, the **🏠 Rooms** button (`H`), a resident's **👀 Look inside / 🏡 Their home** button, or just follow a selected resident — the camera goes in and out of buildings with them. **🎨 Decorate** any room: wall and floor colours or your own textures as wallpaper/flooring, furniture colour, and decorations (plants, lamps, piano, arcade machine, aquarium, giant teddy, guitar, trophy shelf). The window shows the weather outside, and lamps come on at night.
 
 ### The condo
 
-The island has room for **10 houses**. When an 11th resident moves in, a **🏢 condo tower** appears behind the houses, and every later resident gets an apartment there (four per floor, as many floors as needed). Residents really walk through it: in the front door to the **lobby** (sofa, mailboxes), up the lift to **their floor's hallway**, and in through their own door (with their name on it) — and back out the same way, whatever sends them out (an errand, the clinic, a friend to visit). Neighbours bump into each other in the hallways and stop for a chat, hang out there, and visit each other's apartments. The condo also has an **indoor pool** that anyone can use — it's especially popular when it rains — with its own **Pool Lifeguard** job. Click the condo or use **🏠 Rooms** to look into the lobby, the pool, each floor and each apartment.
+Everyone lives in the **🏢 condo tower** at the back of the island: each resident gets an apartment (four per floor, as many floors as needed). Residents really walk through it: in the front door to the **lobby** (sofa, mailboxes), up the lift to **their floor's hallway**, and in through their own door (with their name on it) — and back out the same way, whatever sends them out (an errand, the clinic, a friend to visit). Neighbours bump into each other in the hallways and stop for a chat, hang out there, and visit each other's apartments. The condo also has an **indoor pool** that anyone can use — it's especially popular when it rains — with its own **Pool Lifeguard** job. Click the condo or use **🏠 Rooms** to look into the lobby, the pool, each floor and each apartment.
+
+### Venues & things to do
+
+The land where houses used to stand now holds **venues**: a **🧺 Picnic Lawn** (free), a **🔥 Campfire**, a **🏀 Basketball Court**, a **🛝 Playground**, a **🌮 Food Truck**, a **🔭 Stargazing Lookout** and a **♨️ Hot Spring**. Build them from the **📒 Budget** window (click your coins) or **🔨 Build → 🏗️ Venues**. Each has its own things to do: shooting hoops, swings and slides, picnics with a friend, evening campfire stories, stargazing at dusk, snacks, and soaking in the hot spring in swimwear. Around the island residents also jog the coast, fly kites, do beach yoga, build sandcastles, take selfies and people-watch.
+
+### Money
+
+Money matters now. **Income:** residents' **wages** (get them jobs and promotions), solving problems, level-ups, a small daily allowance. **Costs:** every morning the island pays **rent** for each apartment and **upkeep** for each venue; residents' everyday life costs money too (café meals, snacks, hot-spring entry, shopping, clinic visits); and venues have to be built. The **📒 Budget** window shows today's and yesterday's income and spending and tomorrow's bills. Go into **debt** and residents get unhappy (more each day) and the shop won't sell to you. **⚙️ Settings → Cost of living** sets how tight it is (Relaxed / Normal / Tight).
+
+### Night mischief
+
+Now and then, after bedtime, someone **sneaks out** for something a little naughty: a **midnight dip** or an **underwear dare run** round the fountain (stripped down to their "Underwear" outfit), an **after-hours soak** in the hot spring, a **snack raid** on the closed café, **moonlight dancing** on the stage, a **secret campfire** or **stargazing** in their sleepwear. They usually wake a **close friend** to come along. The noise can wake a neighbour: a **close friend tags along** instead of telling, anyone else **scolds** them and sends them home red-faced, and an officer on duty hands out a **curfew fine**. Get away with it and it's in the news the next morning. Turn it off in **⚙️ Settings → Night mischief**.
+
+Otherwise nights are quiet: residents who are home at bedtime stay in, do their bedtime routine and sleep in their sleepwear. If someone does get caught out in their sleepwear at night, they go back to bed rather than getting dressed for the day. Too dark? **⚙️ Settings → Night brightness**.
 
 ### Swimming & lifeguards
 
@@ -177,11 +191,11 @@ Works best between VRoid models with similar body shapes. Clothing physics (spri
 
 ### Variations
 
-The **👕 Wardrobe** lists every part of a resident's model and outfit — one item per **texture**, so parts that share a material name (VRoid often names socks, bra and panties all "Onepiece_00_CLOTH") are separate items, numbered "(1/3)", "(2/3)"… with a small texture preview. For each item you can swap in a **texture**, apply a **colour tint**, **hide** it, mark it **Thin** (it turns see-through when wet) or **Mishap** (it can go missing in a wardrobe mishap). Save the result as a named **variant** of the character or outfit — any resident using that model can pick the variant. (Tip: export a texture from VRoid Studio, edit it, import it — it keeps the right UV layout.)
+The **👕 Wardrobe** lists every part of a resident's model and outfit — one item per **texture**, so parts that share a material name (VRoid often names socks, bra and panties all "Onepiece_00_CLOTH") are separate items, numbered "(1/3)", "(2/3)"… with a small texture preview. For each item you can swap in a **texture**, apply a **colour tint**, **hide** it, mark it **Thin** (it turns see-through when wet) or **Mishap** (it can go missing in a wardrobe mishap). Save the result as a named **variant** of the character or outfit — any resident using that model can pick the variant — and it's also added to the resident's **closet** as a new outfit (same name and "wear when…" tags as the one you edited, which stays as it was). (Tip: export a texture from VRoid Studio, edit it, import it — it keeps the right UV layout.)
 
 ### Textures (.png / .jpg / .webp)
 
-Used by the Wardrobe (above) and for re-skinning the island's **ground** and **paths** (Build → 🖼️ Surfaces, or the Library's texture tab).
+A texture with **"metallic"** or **"silk"** in its name is always shiny (silk softly, metallic strongly) and keeps that same shine when the resident is wet. Used by the Wardrobe (above) and for re-skinning the island's **ground** and **paths** (Build → 🖼️ Surfaces, or the Library's texture tab).
 
 ### Animations (.vrma / .json)
 
@@ -214,7 +228,7 @@ In the Library you can **replace any built-in action** (idle, walk, run, dance, 
 electron/        desktop shell (window, mods folder, samples)
 src/core/        library (IndexedDB + mods), helpers
 src/engine/      renderer/sky/lighting, weather & particles, wet/snow materials, audio, effects
-src/world/       island layout, buildings & props, room instances (houses, café, shop, clinic, condo)
+src/world/       island layout, buildings & props, venues, room instances (apartments, café, shop, clinic, condo)
 src/characters/  VRM + doll avatars, outfits, animation system, built-in animations
 src/sim/         residents, brain (daily routine), room brain, social, fights, problems, jobs,
                  outfits (conditions, perception, mishaps), swimming & rescues, condo

@@ -139,7 +139,9 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
       if (!s.dressFirst(r, 'swim', () => s.swim.planSwim(r))) s.swim.planSwim(r);
     });
     let changedAtHome = false, swam = false, changedOutside = false;
-    for (let i = 0; i < 300 && !(changedAtHome && swam); i++) {
+    // (the condo is at the far end of the island from the beach: a long walk)
+    await ev(() => { window.__friendlife.sim.speed = 8; });
+    for (let i = 0; i < 600 && !(changedAtHome && swam); i++) {
       await wait(1000);
       const st = await ev(() => { const r = window.__swimmer; return { in: r.inside, home: r.inside === r.homeKey, w: r.d.wearing, water: r.inWater, seat: r.seat?.type }; });
       if (st.w === 0 && st.home) changedAtHome = true;
