@@ -1,6 +1,7 @@
 // FriendLife entry point.
 import * as THREE from 'three';
 import * as outfitsDebug from './sim/outfits.js';
+import * as activitiesDebug from './sim/activities.js';
 import { Stage } from './engine/stage.js';
 import { Weather } from './engine/weather.js';
 import { AudioEngine } from './engine/audio.js';
@@ -62,6 +63,7 @@ class App {
     this.loop();
     window.__friendlife = this; // handy for debugging from devtools
     window.__friendlifeOutfits = outfitsDebug;
+    window.__friendlifeActivities = activitiesDebug;
     await this.showTitle();
   }
 
@@ -461,6 +463,7 @@ class App {
     }
     const sdt = dt * (this.started ? Math.max(sim.speed, 0.0001) : 1);
     this.weather.update(sdt, this.started ? sdt : 0, sim.minuteOfDay);
+    this.stage.nightBrightness = sim.settings.nightBrightness ?? 0.5;
     this.stage.updateEnvironment(dt, sim.minuteOfDay, this.weather.p);
     this.island.update(sdt, this.stage.light);
     this.effects.update(sdt);

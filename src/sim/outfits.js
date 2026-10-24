@@ -293,10 +293,90 @@ export function updateOutfitPerception(sim, min) {
   }
 }
 
-const SEE_UNDIES = {
-  attracted: ['W-whoa... 😳', 'I can see your underwear! ...not that I mind.', 'Um. Wow. Hi.', '*stares* ...sorry, what were we talking about?'],
-  same: ['Uh, I can see your underwear!', 'Psst! You might want to put some clothes on...', 'Hehe, nice undies!', 'Um... your underwear is showing.'],
-};
+
+const anim = (o, name, r) => { if (!o.plan.length && !o.moving && !o.step) o.setPlan([{ kind: 'anim', anim: name, dur: 2.4, faceX: r.x, faceZ: r.z }]); };
+
+/**
+ * Someone spots a resident's underwear. How they react depends on who they
+ * are to each other and their personality: flustered crushes, teasing best
+ * friends, groaning family, a kind soul offering a jacket, a prankster
+ * pointing and laughing, a prude scolding, the shy one pretending not to see.
+ */
+export function reactToUndies(sim, o, r, near = []) {
+  const attracted = sim.settings.romance && !isRelative(o, r) && ((o.d.gender === 'm' && r.d.gender === 'f') || (o.d.gender === 'f' && r.d.gender === 'm'));
+  const rel = o.rel(r.id);
+  const t = o.t;
+  const close = rel.score > 60;
+  const why = underwearIntent(sim, r);
+  o.faceTo(r.x, r.z);
+  let kind;
+  if (rel.partner) kind = 'partner';
+  else if (isRelative(o, r)) kind = 'family';
+  else if (close) kind = 'bestie';
+  else if (attracted) kind = pick(['flustered', 'flustered', 'stare', 'smooth']);
+  else if (t.kindness > 0.65 && !why) kind = 'jacket';
+  else if (t.quirk > 0.65 || (t.temper > 0.5 && rel.score < 0)) kind = 'laugh';
+  else if (t.sociability < 0.35) kind = 'shy';
+  else if (t.temper > 0.65 && t.confidence > 0.5) kind = 'scold';
+  else kind = pick(['notice', 'notice', 'bold']);
+  const lines = {
+    partner: ['Babe! Clothes! ...actually, never mind. 😏', 'Is this for me? 😳', 'Put something on before someone else sees you like that!'],
+    family: ['Ugh, cover up! I\'m family!', 'Nope. Didn\'t need to see that. 🙈', 'Mom would be SO embarrassed right now.'],
+    bestie: ['Nice undies, bestie! 😂', 'Did you lose a bet or something?', 'Bold move! I respect it.', 'Going somewhere fun? Wait for me!'],
+    flustered: ['W-whoa... 😳', 'I-I can see your... um...', '*trips over own feet*', 'My face is so red right now...'],
+    stare: ['*stares* ...sorry, what were we talking about?', 'Um. Wow. Hi.', '*forgets how to speak*'],
+    smooth: ['Looking good. Real good. 😏', 'Well, that\'s one way to make an entrance.', 'You should dress like that more often.'],
+    jacket: ['Here, take my jacket!', 'Oh no, are you okay? Let me help you cover up!', 'Quick, stand behind me!'],
+    laugh: ['HAHAHA! Everyone look! 🤣', 'Nice underwear! LOL!', 'Pfft— I can\'t breathe! 😂'],
+    shy: ['I-I didn\'t see anything! 🙈', '*looks away very hard*', 'Eep!'],
+    scold: ['Have some decency!', 'This is a public place, you know!', 'Put some clothes on, honestly!'],
+    notice: ['Uh, I can see your underwear!', 'Psst! You might want to put some clothes on...', 'Um... your underwear is showing.'],
+    bold: ['Huh. Bold choice.', 'Laundry day?', 'Interesting outfit...'],
+  }[kind];
+  const emoji = { partner: '😳', family: '🙈', bestie: '😂', flustered: '😳', stare: '😳', smooth: '😏', jacket: '🧥', laugh: '🤣', shy: '🙈', scold: '😤', notice: '👀', bold: '🤨' }[kind];
+  o.say(pick(lines), { emoji });
+  anim(o, { laugh: 'laugh', bestie: 'laugh', shy: 'shy', flustered: 'shy', stare: 'shocked', scold: 'argue', family: 'shy', jacket: 'wave', notice: 'point', bold: 'think', smooth: 'wave', partner: 'shy' }[kind] || 'idle', r);
+  // effects on the onlooker
+  if (['flustered', 'stare', 'smooth', 'partner'].includes(kind)) {
+    o.setEmotion(chance(0.5) ? 'love' : 'shy', 25);
+    o.changeRel(r.id, 4);
+    if (!rel.crush && !rel.partner && rel.score > 10 && chance(0.25) && kind !== 'partner') {
+      rel.crush = true;
+      o.addMemory(`Couldn't stop thinking about ${r.name} after seeing them in their underwear`);
+      sim.problems.offer(o, 'confess', { other: r.id });
+    }
+  } else o.d.needs.fun = clamp(o.d.needs.fun + (kind === 'laugh' || kind === 'bestie' ? 8 : 3), 0, 100);
+  // and the wearer's reply
+  setTimeout(() => {
+    if (!sim.residents.includes(r) || r.engaged) return;
+    const wt = r.t;
+    if (why) { r.say(pick(ACK[why] || ['I know! It\'s on purpose.']), { emoji: '😄' }); return; }
+    switch (kind) {
+      case 'jacket':
+        r.say(pick(['Thank you SO much! 🥹', 'You\'re a lifesaver!', 'I owe you one!']), { emoji: '🥹' });
+        r.changeRel(o.id, 6); o.changeRel(r.id, 3);
+        r.d.happiness = clamp(r.d.happiness + 2, 0, 100);
+        break;
+      case 'laugh':
+        r.say(pick(['Stop laughing!! 😭', 'It\'s NOT funny!', 'I hate you right now.']), { emoji: '😭' });
+        r.changeRel(o.id, -4);
+        r.setEmotion('shy', 50);
+        for (const x of near) if (x !== o && chance(0.4)) { x.say(pick(['*giggles*', 'Hehe...', 'Oh my...']), { emoji: '🤭' }); }
+        break;
+      case 'scold':
+        r.say(wt.temper > 0.6 ? pick(['Mind your own business!', 'Nobody asked you!']) : pick(['S-sorry!', 'I\'m going, I\'m going!']), { emoji: wt.temper > 0.6 ? '😠' : '😣' });
+        r.changeRel(o.id, -2);
+        break;
+      case 'bestie': case 'partner':
+        r.say(pick(['Don\'t tell anyone! 🤫', 'Hehe... oops?', 'You saw nothing!']), { emoji: '🤭' });
+        r.changeRel(o.id, 2);
+        break;
+      default:
+        if (wt.confidence > 0.75) r.say(pick(['What? It\'s a look.', 'Jealous?', 'I make this work.']), { emoji: '😎' });
+        else r.say(pick(['Wh-what?! Oh no!', 'Don\'t look at meee!', '*turns bright red*']), { emoji: '😳' });
+    }
+  }, 1700);
+}
 
 /**
  * Underwear on show in public gets noticed; people who feel embarrassed in
@@ -306,6 +386,7 @@ const SEE_UNDIES = {
 export function updateExposure(sim, min) {
   for (const r of sim.residents) {
     if (r.engaged || r.ko || !r.avatar || r.sleeping || (r.inside && !r.room)) continue;
+    if (r.nightOut) continue; // sneaking out on purpose (night.js handles getting caught)
     if (!inPublic(r)) continue;
     const showing = underwearShowing(r);
     // dressed like this on purpose (swimwear on the way back from the beach…): no shock
@@ -317,28 +398,14 @@ export function updateExposure(sim, min) {
     if (showing && chance(0.05 * min) && sim.clock - (r.seenUndiesAt ?? -999) > 10) {
       r.seenUndiesAt = sim.clock;
       const o = pick(near);
-      const attracted = sim.settings.romance && !isRelative(o, r) && ((o.d.gender === 'm' && r.d.gender === 'f') || (o.d.gender === 'f' && r.d.gender === 'm'));
-      o.faceTo(r.x, r.z);
-      o.say(pick(attracted ? SEE_UNDIES.attracted : SEE_UNDIES.same), { emoji: attracted ? '😳' : '👀' });
-      if (attracted) {
-        o.setEmotion(chance(0.5) ? 'love' : 'shy', 25);
-        o.changeRel(r.id, 4);
-        const rel = o.rel(r.id);
-        if (!rel.crush && !rel.partner && rel.score > 10 && chance(0.25)) {
-          rel.crush = true;
-          o.addMemory(`Couldn't stop thinking about ${r.name} after seeing them in their underwear`);
-          sim.problems.offer(o, 'confess', { other: r.id });
-        }
-      } else {
-        o.d.needs.fun = clamp(o.d.needs.fun + 4, 0, 100);
-      }
+      reactToUndies(sim, o, r, near);
     }
     // the wearer reacts: go and get dressed (unless they're proud of it or working)
     if (embarrassed && !r.working && !r.errand && sim.clock - (r.lastDressTrip ?? -1e9) > 20 && chance(0.06 * min)) {
       r.say(pick(['Eek! Don\'t look!', 'I need to go change. NOW.', 'Nobody saw that, right?!', '*covers up* Be right back!']), { emoji: '😳' });
       r.setEmotion('shy', 40);
       r.d.happiness = clamp(r.d.happiness - 3, 0, 100);
-      sim.goChange(r, { avoidEmbarrassing: true, say: false });
+      sim.coverUp(r);
     }
   }
 }
@@ -501,6 +568,7 @@ const ACT_TAG = { swim: 'swim', sleep: 'sleep', exercise: 'exercise', dance: 'pa
 export function underwearIntent(sim, res) {
   const m = res.d.mishap;
   if (m) return m.owned ? 'own' : null;
+  if (res.nightOut) return 'mischief';
   // they remember why they put it on (e.g. walking back from a swim)
   const why = outfitPurpose(res);
   if (why) return why;
@@ -522,6 +590,7 @@ const ACK = {
   party: ['It\'s for dancing!', 'Gotta move freely!'],
   work: ['It\'s my work uniform, actually.', 'All part of the job!'],
   date: ['It\'s for my date~', 'I\'m dressed for a date!'],
+  mischief: ['Shh! We\'re sneaking out! 🤫', 'Don\'t tell anyone, okay?', 'It\'s a night adventure! 😈'],
   own: ['I know. I\'m owning it. 😎', 'It\'s a look!'],
 };
 
@@ -573,7 +642,7 @@ export function underwearChatBeats(sim, it) {
  * (not off to swim in it, not dressed for the activity they're heading to)?
  */
 export function underdressedToLeave(res) {
-  if (!underwearShowing(res)) return false;
+  if (!underwearShowing(res) || res.nightOut) return false;
   if (res.d.mishap?.owned) return false;
   const tags = outfitMeta(res, res.d.wearing ?? -1)?.tags || [];
   const act = res.activity && res.activity !== 'sleep' ? res.activity : null;

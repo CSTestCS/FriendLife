@@ -192,6 +192,15 @@ export class Stage {
     this.hemi.groundColor.setRGB(0.42, 0.37, 0.3).multiplyScalar(s.ambient);
     this.hemi.intensity = 0.2 + s.ambient * 1.1;
     this.renderer.toneMappingExposure = 0.8 + s.ambient * 0.25;
+    // night brightness (player setting): moonlight, sky light and exposure lifted at night
+    const nf = clamp((0.45 - s.ambient) * 3.2);
+    const boost = this.nightBrightness ?? 0.5;
+    if (nf > 0) {
+      this.hemi.intensity += nf * boost * 1.3;
+      this.hemi.color.lerp(_c1.setRGB(0.62, 0.7, 0.95), nf * boost * 0.4);
+      if (!isDay) this.sun.intensity += nf * boost * 0.9;
+      this.renderer.toneMappingExposure += nf * boost * 0.45;
+    }
 
     const u = this.skyUniforms;
     u.uTop.value.copy(s.top);

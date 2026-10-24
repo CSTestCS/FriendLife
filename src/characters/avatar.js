@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { BONES, buildDoll, nearestBone } from './rig.js';
 import { parseVRM, disposeVRM, releaseVRMFile } from './loaders.js';
-import { prepareMToonWet, applyMToonWet, patchWeather } from '../engine/materials.js';
+import { prepareMToonWet, applyMToonWet, patchWeather, shineKind, applyMToonShine, applyPBRShine } from '../engine/materials.js';
 import { clamp, damp, rand } from '../core/util.js';
 
 const R180 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
@@ -388,6 +388,9 @@ export class Avatar {
         }
         m.visible = !this.look.hidden.includes(slot.key);
         m.userData.thin = this.look.thin.includes(slot.key);
+        // "metallic" / "silk" in the texture's name: always shiny
+        const texName = tex ? (textureStore?.library?.displayName?.(texId) || tex.name) : (o.map?.name || o.map?.source?.data?.name || '');
+        m.userData.shine = shineKind(texName);
         const tint = this.look.tints[slot.key];
         m.userData.tint = tint ? new THREE.Color(tint) : null;
         if (this.kind === 'doll' && o.color) {
@@ -431,11 +434,20 @@ export class Avatar {
 
   _refreshMaterials() {
     this._applyThin();
-    if (this.kind !== 'vrm') return;
+    if (this.kind !== 'vrm') {
+      for (const m of Object.values(this.doll?.slots || {})) if (m.isMeshStandardMaterial) applyPBRShine(m, m.userData.shine || null);
+      return;
+    }
     const mats = [...this.materials, ...(this.outfit?.materials || [])];
     for (const m of mats) {
-      if (m.isMToonMaterial) applyMToonWet(m, this.wetness, m.userData.tint || null);
-      else if (m.color && m.userData.origMap?.color) {
+      if (m.isMToonMaterial) {
+        // shiny fabrics keep their own steady shine (the wet look leaves them alone)
+        if (m.userData.shine) applyMToonShine(m, m.userData.shine, m.userData.tint || null);
+        else applyMToonWet(m, this.wetness, m.userData.tint || null);
+        continue;
+      }
+      if (m.isMeshStandardMaterial) applyPBRShine(m, m.userData.shine || null);
+      if (m.color && m.userData.origMap?.color) {
         m.color.copy(m.userData.origMap.color);
         if (m.userData.tint) m.color.multiply(m.userData.tint);
       }

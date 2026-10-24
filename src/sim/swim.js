@@ -242,7 +242,7 @@ export class SwimManager {
       sim.social.maybeCrush(v, r);
       if (c.isGuard) {
         const tip = Math.round(rand(20, 45));
-        sim.money += tip;
+        sim.economy.earn(tip, "tips");
         if (r.d.job) r.d.job.xp = (r.d.job.xp || 0) + 120;
         sim.news(`Lifeguard ${r.name} rescued ${v.name}! The island tipped +${tip} 🪙`, '🛟');
         sim.progress?.add(30, 'rescue');

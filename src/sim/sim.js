@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { Resident, newResidentData } from './resident.js';
-import { think } from './brain.js';
+import { think, isBedtime, bedtimeAtHome, backToBed } from './brain.js';
 import { Social, emotionExpr } from './social.js';
 import { FightManager } from './fight.js';
 import { Problems } from './problems.js';
@@ -13,8 +13,10 @@ import { SwimManager } from './swim.js';
 import { Condo } from './condo.js';
 import { updatePriorRelations } from './relations.js';
 import { Progress, residentPerks, updateCelebrities } from './progress.js';
-import { updateJobs, onDuty, jobOf } from './jobs.js';
-import { preferredOutfit, updateOutfitPerception, selfMoodShift, updateMishaps, causeMishap, updateExposure, isUnderwear, embarrassingToWear, fixMishap, setOutfitPurpose, mustDryFirst } from './outfits.js';
+import { Economy, VENUES } from './economy.js';
+import { NightLife } from './night.js';
+import { updateJobs, onDuty, jobOf, isOnShift } from './jobs.js';
+import { preferredOutfit, updateOutfitPerception, selfMoodShift, updateMishaps, causeMishap, updateExposure, isUnderwear, embarrassingToWear, fixMishap, setOutfitPurpose, mustDryFirst, outfitPurpose, outfitMeta } from './outfits.js';
 import { INJURIES, line, NAMES, foodById, FOODS, ITEMS } from './data.js';
 import { Emitter, chance, clamp, damp, pick, rand } from '../core/util.js';
 
@@ -34,6 +36,9 @@ export const DEFAULT_SETTINGS = {
   voiceScope: 'selected', // selected | near  (who uses text-to-speech; others babble)
   autoOutfits: true,
   underwearRate: 0.05, // chance a resident leaves home in underwear without noticing
+  nightBrightness: 0.5, // 0 = dark nights, 1 = bright moonlight
+  economy: 'normal', // relaxed | normal | tight (how much bills cost)
+  nightMischief: true, // residents sometimes sneak out at night
   quality: 'high',
 };
 
@@ -58,6 +63,9 @@ export class Sim extends Emitter {
     this.swim = new SwimManager(this);
     this.condo = new Condo(this);
     this.progress = new Progress(this);
+    this.economy = new Economy(this);
+    this.night = new NightLife(this);
+    this.syncVenues();
     if (this.rooms) this.rooms.condo = this.condo;
     this.dialogue = new Dialogue(this);
     this.snowmen = [];
@@ -98,16 +106,9 @@ export class Sim extends Emitter {
     const res = new Resident(this, data);
     this.residents.push(res);
     this.residentGroup.add(res.group);
-    // a house while there are free ones (up to 10), otherwise an apartment in the condo
-    const slot = data.condoUnit == null ? this.island.assignHouse(res.id, data.name, data.houseIndex) : null;
-    if (slot) {
-      data.houseIndex = slot.index;
-      data.condoUnit = null;
-    } else {
-      data.houseIndex = null;
-      this.condo.assign(res, data.condoUnit);
-      if (announce) this.news(`The houses are all taken, so ${data.name} moved into apartment #${this.condo.unitLabel(data.condoUnit)} in the condo! 🏢`, '🏢');
-    }
+    // everyone gets an apartment in the condo (old saves with houses move in too)
+    data.houseIndex = null;
+    this.condo.assign(res, data.condoUnit);
     const home = this.homeOf(res);
     if (data.insideState) {
       res.enter(data.insideState.loc, Math.max(1, data.insideState.until - this.clock));
@@ -127,7 +128,7 @@ export class Sim extends Emitter {
     res.refreshAttachments();
     res.setExpression(emotionExpr(res.mood()));
     if (announce) {
-      this.news(`${data.name} moved to the island! Welcome! 🏡`, '🏡');
+      this.news(`${data.name} moved to the island and into apartment #${this.condo.unitLabel(data.condoUnit)}! Welcome! 🏢`, '🏡');
       this.progress.add(30, 'new resident');
       res.say(`Hi! I'm ${data.name}! ${data.catchphrase}`, { emoji: '👋' });
       res.play('wave');
@@ -211,6 +212,30 @@ export class Sim extends Emitter {
 
   /** Mend a wardrobe mishap (tailor, sewing kit). */
   fixMishapFor(res) { fixMishap(this, res, true); }
+
+  /**
+   * Seen in something embarrassing: cover up. At night in what they sleep in,
+   * that means going back to bed, not getting dressed for the day.
+   */
+  coverUp(res) {
+    if (this.inSleepwearAtNight(res)) return backToBed(res, this);
+    return this.goChange(res, { avoidEmbarrassing: true, say: false });
+  }
+
+  inSleepwearAtNight(res) {
+    if (!isBedtime(res, this) || res.nightOut) return false;
+    const why = outfitPurpose(res, { anywhere: true });
+    return why === 'sleep' || why === 'home' || !!outfitMeta(res, res.d.wearing ?? -1)?.tags?.includes('sleep');
+  }
+
+  /** At home when their time is up: at night they stay in and go to bed instead. Returns true if so. */
+  stayInForBed(res) {
+    if (res.inside !== res.homeKey || res.nightOut || res.sleeping || res.errand) return false;
+    if (!isBedtime(res, this) || (jobOf(res) && isOnShift(res, this))) return false;
+    if (res.route) return false; // only passing through
+    bedtimeAtHome(res, this);
+    return true;
+  }
 
   /** Dry off with a towel (a few seconds), then carry on with then(). */
   towelOff(res, then = null) {
@@ -338,6 +363,11 @@ export class Sim extends Emitter {
     else if (!res.inside && this.viewRoom) this.emit('viewRoom', null);
   }
 
+  /** Show the venues the island owns, hide the empty lots. */
+  syncVenues() {
+    for (const k of Object.keys(VENUES)) this.island.setVenueOpen?.(k, this.economy.owned.has(k));
+  }
+
   /** Where a resident lives: their house slot, or the condo entrance. {door:[x,z], rot, condo} */
   homeOf(res) {
     const h = this.island.houseOf(res.id);
@@ -404,6 +434,7 @@ export class Sim extends Emitter {
     const price = this.price(item);
     if (this.money < price) return false;
     this.money -= price;
+    this.economy.paid(price, 'shopping');
     this.inventory[id] = (this.inventory[id] || 0) + 1;
     this.audio.pop();
     this.emit('inventory');
@@ -491,6 +522,7 @@ export class Sim extends Emitter {
     res.d.injuries = res.d.injuries.filter((i) => i.remaining > 30);
     res.refreshAttachments();
     res.say('The doctor patched me up!', { emoji: '🏥' });
+    this.economy.living(res, 'clinic');
     this.emit('resident', res);
   }
 
@@ -607,7 +639,7 @@ export class Sim extends Emitter {
       res.d.xp -= this.xpForLevel(res.d.level);
       res.d.level += 1;
       const coins = 50 + res.d.level * 10;
-      this.money += coins;
+      this.economy.earn(coins, 'level-ups');
       const unlock = res.d.level === 5 ? ' They can now throw house parties! 🎉' : res.d.level === 8 ? ' They\'re now an island celebrity! 🌟' : '';
       this.news(`${res.name} reached level ${res.d.level}! (+${coins} 🪙)${unlock}`, '⭐');
       this.progress.add(20, 'resident level');
@@ -663,9 +695,10 @@ export class Sim extends Emitter {
     // daily rollover
     if (this.day !== this.lastDay) {
       this.lastDay = this.day;
-      const allowance = 40 + this.progress.allowanceBonus;
-      this.money += allowance;
+      const allowance = 15 + this.progress.allowanceBonus;
+      this.economy.earn(allowance, 'allowance');
       this.news(`Good morning! Day ${this.day} begins. Daily island allowance: +${allowance} 🪙`, '🌅');
+      this.economy.newDay();
       this.progress.add(25, 'new day');
       this.emit('day', this.day);
     }
@@ -792,6 +825,7 @@ export class Sim extends Emitter {
     updatePriorRelations(this, min);
     updateCelebrities(this, min);
     updateMishaps(this, min);
+    this.night.update(min);
     for (const r of this.residents) {
       if (!r.inside && !r.engaged && !r.inWater && !r.d.mishap && chance(0.00008 * min)) causeMishap(this, r, chance(0.6) ? 'seam' : 'stain');
     }
@@ -843,6 +877,8 @@ export class Sim extends Emitter {
       clock: this.clock,
       money: this.money,
       progress: this.progress.serialize(),
+      economy: this.economy.serialize(),
+      night: this.night.serialize(),
       inventory: this.inventory,
       news: this.newsLog.slice(0, 80),
       settings: this.settings,
@@ -861,6 +897,9 @@ export class Sim extends Emitter {
     this.lastDay = this.day;
     this.money = data.money ?? 300;
     this.progress.restore(data.progress);
+    this.economy.restore(data.economy);
+    this.night.restore(data.night);
+    this.syncVenues();
     this.inventory = data.inventory || {};
     this.newsLog = data.news || [];
     this.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };

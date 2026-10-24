@@ -69,7 +69,7 @@ export class Progress {
     while (this.xp >= this.next) {
       this.level++;
       const bonus = 100 * this.level;
-      sim.money += bonus;
+      sim.economy.earn(bonus, "island level");
       const unlocks = ISLAND_LEVELS.filter((l) => l.level === this.level).map((l) => l.text);
       sim.news(`🏝️ Island level ${this.level} — "${islandTitle(this.level)}"! +${bonus} 🪙${unlocks.length ? ` Unlocked: ${unlocks.join('; ')}.` : ''}`, '🏝️');
       sim.alert(`🏝️ Island level ${this.level}!${unlocks.length ? ` Unlocked: ${unlocks.join('; ')}` : ''}`, null, 'level');

@@ -685,6 +685,8 @@ export class Resident {
           if (this.sleeping && !(this.wakeAt <= sim.clock)) this.wakeAt = sim.clock;
           if (this.activity === 'sleep' && !this.sleeping) this.morningPending = true;
           this.insideUntil = sim.clock + 20;
+        } else if (sim.stayInForBed(this)) {
+          // it's late: staying in for the night
         } else if (this.inside === this.homeKey && this._checkDressedToLeave()) {
           // went back to the wardrobe first
         } else if (this.room && sim.rooms?.parentOf(this.inside)) {

@@ -9,10 +9,11 @@ import {
 } from './props.js';
 import { rand, uid } from '../core/util.js';
 import { bakeStatic } from '../engine/batch.js';
+import { placeVenues, animateVenues } from './venues.js';
 
 export const ISLAND_RADIUS = 44;
 export const WATER_Y = -0.55;
-export const MAX_HOUSES = 10; // later residents move into the condo
+export const MAX_HOUSES = 0; // everyone lives in the condo
 const SWIM_DEPTH = -0.95; // terrain below this is deep enough to swim
 const STAGE_ROT = Math.atan2(6, -12); // front of the stage faces the plaza
 
@@ -168,27 +169,10 @@ export class Island {
       }
     }
 
-    // ---- house slots: arc behind the plaza ----
-    for (let i = 0; i < 16; i++) {
-      const ring = i < 9 ? 0 : 1;
-      const idx = ring === 0 ? i : i - 9;
-      const count = ring === 0 ? 9 : 7;
-      const radius = ring === 0 ? 24 : 33;
-      const a0 = -Math.PI * 0.93, a1 = -Math.PI * 0.07;
-      const a = a0 + (a1 - a0) * (count === 1 ? 0.5 : idx / (count - 1));
-      const x = Math.cos(a) * radius;
-      const z = Math.sin(a) * radius;
-      if (Math.hypot(x - -14, z - -13) < 7) continue; // keep clear of clinic
-      const rot = Math.atan2(-x, -z); // face plaza
-      if (ring === 1 && Math.abs(x) < 1) {
-        // the middle of the back row is reserved for the condo tower
-        this.condoSlot = { x, z, rot };
-        continue;
-      }
-      this.houses.push({ index: this.houses.length, x, z, rot, owner: null, obj: null });
-    }
+    // ---- everyone lives in the condo tower (back of the island, behind the plaza) ----
+    this.condoSlot = { x: 0, z: -33, rot: 0 };
 
-    // condo (shown once the island has more residents than houses)
+    // condo
     {
       const c = this.condoSlot;
       const fwd = new THREE.Vector3(Math.sin(c.rot), 0, Math.cos(c.rot));
@@ -319,15 +303,27 @@ export class Island {
     for (const o of this.condoReserve) this.obstacles.splice(this.obstacles.indexOf(o), 1);
     this.condoReserve = [];
 
+    // new places to go where the old house plots were
+    this.venueAnim = placeVenues(this);
+    this.showCondo(true);
+
     // merge the static scenery (trees, lamps, paths, stage, pier…) into a few meshes;
     // buildings are merged one by one so they can still be clicked
-    const buildings = new Set(Object.values(this.locations).map((l) => l.building).filter(Boolean));
+    const buildings = new Set(Object.values(this.locations).map((l) => l.building || (l.venue && l.obj)).filter(Boolean));
     for (const b of buildings) bakeStatic(b);
     const decor = new THREE.Group();
     decor.name = 'staticDecor';
     this.group.add(decor);
     const parts = this.group.children.filter((o) => o !== decor && o !== this.ground && o !== this.water && !buildings.has(o));
     bakeStatic(this.group, { parts, into: decor });
+  }
+
+  /** Open (built) or closed (empty lot) venue. */
+  setVenueOpen(key, on) {
+    const l = this.locations[key];
+    if (!l?.venue) return;
+    l.locked = !on;
+    if (l.obj) l.obj.visible = !!on;
   }
 
   /** Show / hide the condo tower (only there while someone lives in it). */
@@ -592,6 +588,7 @@ export class Island {
     // night lights
     nightMaterials.window.emissiveIntensity = light.night * 1.6;
     nightMaterials.bulb.emissiveIntensity = 0.2 + light.night * 2.5;
+    if (this.venueAnim) animateVenues(this.venueAnim, this.time, light.night);
     if (this.fountain?.userData.spray) {
       const s = this.fountain.userData.spray;
       s.scale.y = 0.6 + Math.sin(this.time * 6) * 0.08;

@@ -6,6 +6,7 @@ import { line, INJURIES } from './data.js';
 import { jobOf, isOnShift, planOutdoorWork } from './jobs.js';
 import { causeMishap } from './outfits.js';
 import { residentPerks } from './progress.js';
+import { activityChoices, planActivity } from './activities.js';
 
 function swimWeight(res, sim) {
   const w = sim.weather;
@@ -15,6 +16,56 @@ function swimWeight(res, sim) {
   if (sim.swim.guardOnDuty('beach', sim.island)) wt *= 1.5; // people feel safer with a lifeguard watching
   if (res.d.outfits?.some((o) => o.tags?.includes('swim')) || res.d.mainOutfit?.tags?.includes('swim')) wt *= 1.4;
   return wt;
+}
+
+/** Is it this resident's bedtime? (night owls stay up a bit later) */
+export function isBedtime(res, sim) {
+  const hour = sim.minuteOfDay / 60;
+  const bedtime = 22 + (res.t.energy - 0.5) * 2;
+  return hour >= bedtime || hour < 6;
+}
+
+/** Minutes of sleep from now until their alarm. */
+export function sleepMinutes(res, sim) {
+  const hour = sim.minuteOfDay / 60;
+  const wake = 6.5 + rand(0, 1.5);
+  let minutes = hour >= 12 ? (24 - hour + wake) * 60 : (wake - hour) * 60;
+  if (res.d.needs.energy < 12 && hour > 6 && hour < 21) minutes = 120;
+  return Math.max(30, minutes);
+}
+
+/**
+ * Already at home when it gets late: stay in and go to bed (bedtime routine,
+ * sleepwear and all) instead of heading out into the night.
+ */
+export function bedtimeAtHome(res, sim) {
+  const minutes = sleepMinutes(res, sim);
+  res.sleeping = true;
+  res.bedtimeDone = false;
+  res.wakeAt = sim.clock + minutes;
+  res.insideUntil = sim.clock + minutes + 45;
+  res.leaving = false;
+  res.route = null;
+  res.activity = null;
+}
+
+/** Caught out at night in sleepwear: no point getting dressed, just go back to bed. */
+export function backToBed(res, sim) {
+  if (res.inside === res.homeKey) { res.clearPlan(); bedtimeAtHome(res, sim); return true; }
+  const door = sim.locationDoor(res.homeKey, res);
+  if (!door) return false;
+  const go = () => {
+    const d = sim.locationDoor(res.homeKey, res) || door;
+    res.clearPlan();
+    res.setPlan([
+      { kind: 'walk', x: d[0], z: d[1], run: true },
+      // once they're through the door, the apartment puts them to bed (see thinkIndoors)
+      { kind: 'enter', loc: res.homeKey, minutes: 600 },
+    ]);
+  };
+  if (res.inside) res.headOut(go); else go();
+  res.nightOut = null;
+  return true;
 }
 
 export function think(res, sim) {
@@ -40,13 +91,9 @@ export function think(res, sim) {
 
   const onClock = !!jobOf(res) && isOnShift(res, sim);
   // --- night: go home and sleep (not while on the clock — early shifts start before dawn)
-  const bedtime = 22 + (res.t.energy - 0.5) * 2;
-  if (!onClock && (hour >= bedtime || hour < 6 || n.energy < 12)) {
+  if (!onClock && (isBedtime(res, sim) || n.energy < 12) && !res.nightOut) {
     if (home) {
-      const wake = 6.5 + rand(0, 1.5);
-      let minutes = hour >= 12 ? (24 - hour + wake) * 60 : (wake - hour) * 60;
-      if (n.energy < 12 && hour > 6 && hour < bedtime) minutes = 120;
-      minutes = Math.max(30, minutes);
+      const minutes = sleepMinutes(res, sim);
       res.setPlan([
         { kind: 'walk', x: home.door[0], z: home.door[1] },
         { kind: 'call', fn: () => res.say(line('sleepy'), { emoji: '💤', sound: false }) },
@@ -61,6 +108,8 @@ export function think(res, sim) {
     }
   }
   res.sleeping = false;
+  // --- out at night (sneaking out for mischief): see night.js
+  if (res.nightOut && sim.night?.think(res)) return;
 
   // --- badly hurt or sick: clinic
   const severe = d.injuries.some((i) => !i.treated && (INJURIES[i.type]?.severity ?? 1) >= 2);
@@ -109,12 +158,12 @@ export function think(res, sim) {
       res.setPlan([
         { kind: 'walk', x: seat.x, z: seat.z },
         { kind: 'sit', seat, dur: rand(25, 40), anim: 'eat', expr: { happy: 0.6 } },
-        { kind: 'call', fn: () => { n.hunger = clamp(n.hunger + 70, 0, 100); res.emote('😋', 2); if (chance(0.02)) causeMishap(sim, res, 'stain'); } },
+        { kind: 'call', fn: () => { n.hunger = clamp(n.hunger + 70, 0, 100); res.emote('😋', 2); sim.economy.living(res, 'terrace'); if (chance(0.02)) causeMishap(sim, res, 'stain'); } },
       ]);
     } else {
       res.setPlan([
         { kind: 'walk', x: c.door[0], z: c.door[1] },
-        { kind: 'enter', loc: 'cafe', minutes: rand(30, 50), onExit: () => { n.hunger = 100; n.social = clamp(n.social + 10, 0, 100); } },
+        { kind: 'enter', loc: 'cafe', minutes: rand(30, 50), onExit: () => { n.hunger = 100; n.social = clamp(n.social + 10, 0, 100); sim.economy.living(res, 'cafe'); } },
       ]);
     }
     return;
@@ -176,6 +225,7 @@ export function think(res, sim) {
     ['hallway', sim.condo.unitOf(res.id) != null ? 0.5 + res.t.sociability : 0],
     ['party', residentPerks(d.level).parties && home && hour >= 16 && hour < 21 && (d.lastParty ?? -1e9) < sim.clock - 24 * 60 ? 0.8 + res.t.sociability : 0],
     ['class', sim.residents.some((t) => t.working && t.d.job?.id === 'teacher' && !t.inside) ? 1.2 + res.t.quirk : 0],
+    ...activityChoices(res, sim),
   ];
   const what = weightedPick(choices);
   const happyExpr = { happy: 0.5 + res.t.energy * 0.3 };
@@ -244,7 +294,7 @@ export function think(res, sim) {
     }
     case 'shop': {
       const s = sim.locations.shop;
-      res.setPlan([{ kind: 'walk', x: s.door[0], z: s.door[1] }, { kind: 'enter', loc: 'shop', minutes: rand(20, 40), onExit: () => { n.fun = clamp(n.fun + 15, 0, 100); } }]);
+      res.setPlan([{ kind: 'walk', x: s.door[0], z: s.door[1] }, { kind: 'enter', loc: 'shop', minutes: rand(20, 40), onExit: () => { n.fun = clamp(n.fun + 15, 0, 100); if (chance(0.5)) sim.economy.living(res, 'shop'); } }]);
       return;
     }
     case 'cafeTerrace': {
@@ -359,6 +409,7 @@ export function think(res, sim) {
       break;
     }
     default:
+      if (planActivity(res, sim, what)) return;
       break;
   }
   const p = island.randomPoint(3, 36);

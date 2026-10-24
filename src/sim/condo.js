@@ -1,5 +1,5 @@
-// The condo: once every house is taken, newcomers get an apartment in the
-// condo tower (four per floor, as many floors as needed). The tower has a
+// The condo: every resident has an apartment in the condo tower (four per
+// floor, as many floors as needed). The tower has a
 // lobby, a hallway per floor where neighbours run into each other, and an
 // indoor pool with its own lifeguard post.
 
@@ -42,7 +42,6 @@ export class Condo {
     if (this.units[res.id] == null) return;
     delete this.units[res.id];
     res.d.condoUnit = null;
-    if (!this.active) this.sim.island.showCondo(false);
     this.sim.rooms?.refreshHalls();
   }
 }

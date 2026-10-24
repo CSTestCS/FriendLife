@@ -5,6 +5,7 @@ import { FOODS, ITEMS } from '../sim/data.js';
 import { WEATHER_TYPES } from '../engine/weather.js';
 import { BUILD_CATALOG } from '../world/props.js';
 import { formatClock } from '../core/util.js';
+import { VENUES, COSTS } from '../sim/economy.js';
 
 export function openShop(app) {
   const sim = app.sim;
@@ -37,6 +38,48 @@ export function openShop(app) {
     },
   });
   return m;
+}
+
+/** Budget: what came in and went out, the daily bills, and venues to build. */
+export function openBudget(app) {
+  const sim = app.sim;
+  const eco = sim.economy;
+  openModal({
+    title: '📒 Island Budget',
+    wide: true,
+    body: (b) => {
+      const render = () => {
+        b.innerHTML = '';
+        const sum = (o) => Math.round(Object.values(o || {}).reduce((a, c) => a + c, 0));
+        const rows = (o, sign) => Object.entries(o || {}).sort((x, y) => y[1] - x[1]).map(([k, v]) => h('div', { class: 'row' }, h('span', { style: { flex: 1 } }, k), h('b', {}, `${sign}${Math.round(v)} 🪙`)));
+        const mul = eco.mul;
+        const rent = Math.round(COSTS.rent * sim.residents.length * mul);
+        const upkeep = [...eco.owned].reduce((a, k) => a + Math.round((VENUES[k]?.upkeep || 0) * mul), 0);
+        b.append(h('div', { class: 'row', style: { marginBottom: '8px', gap: '8px' } },
+          h('span', { class: `tag ${sim.money < 0 ? 'bad' : 'good'}` }, `🪙 ${Math.floor(sim.money)}${sim.money < 0 ? ' (in debt!)' : ''}`),
+          h('span', { class: 'tag' }, `Tomorrow's bills: rent ${rent} 🪙 (${sim.residents.length} apartments) + upkeep ${upkeep} 🪙`),
+          h('span', { class: 'tag' }, `Working: ${sim.residents.filter((r) => r.d.job).length}/${sim.residents.length} residents`)));
+        b.append(h('div', { class: 'hint' }, `Residents' jobs pay the bills. Everyday spending: café ${Math.round(COSTS.cafe * mul)}, snack ${Math.round(COSTS.snack * mul)}, hot spring ${Math.round(COSTS.onsen * mul)}, shopping ${Math.round(COSTS.shop * mul)}, clinic ${Math.round(COSTS.clinic * mul)} 🪙. In debt, residents get unhappy and the shop won't sell to you.`));
+        const cols = h('div', { class: 'grid2', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' } });
+        cols.append(
+          h('div', {}, h('h3', {}, `Today: +${sum(eco.today.income)} / −${sum(eco.today.spent)}`), h('b', {}, 'Earned'), ...rows(eco.today.income, '+'), h('b', {}, 'Spent'), ...rows(eco.today.spent, '−')),
+          h('div', {}, h('h3', {}, eco.yesterday ? `Yesterday: +${sum(eco.yesterday.income)} / −${sum(eco.yesterday.spent)}` : 'Yesterday'), eco.yesterday ? h('div', {}, h('b', {}, 'Earned'), ...rows(eco.yesterday.income, '+'), h('b', {}, 'Spent'), ...rows(eco.yesterday.spent, '−')) : h('div', { class: 'hint' }, 'No full day yet.')),
+        );
+        b.append(cols);
+        b.append(h('h3', {}, '🏗️ Venues'));
+        const grid = h('div', { class: 'grid3', style: { gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' } });
+        for (const [k, v] of Object.entries(VENUES)) {
+          const own = eco.owned.has(k);
+          grid.append(h('div', { class: 'shop-item' }, h('div', { class: 'ic' }, v.icon), h('b', {}, v.label), h('div', { class: 'hint' }, v.desc),
+            h('div', { class: 'hint' }, `Upkeep ${Math.round(v.upkeep * mul)} 🪙/day`),
+            own ? h('span', { class: 'tag good' }, 'Open')
+              : h('button', { class: 'primary small', disabled: sim.money < v.price, onclick: () => { const err = eco.buyVenue(k); if (err) toast(err); render(); } }, `Build · ${v.price} 🪙`)));
+        }
+        b.append(grid);
+      };
+      render();
+    },
+  });
 }
 
 export function openNews(app) {
@@ -105,6 +148,8 @@ export function openSettings(app, focus) {
           h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Speech for'), ...[['selected', 'Selected resident'], ['near', 'Everyone nearby']].map(([k, label]) => h('button', { class: `small ${st.voiceScope === k ? 'active' : ''}`, onclick: () => { st.voiceScope = k; render(); } }, label))),
           h('div', { class: 'hint' }, 'Speech uses each resident\'s voice (built-in synthesizer or a system voice — edit in 🎙️ Voice). Residents not chosen here babble.'),
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.autoOutfits !== false, onchange: (e) => { st.autoOutfits = e.target.checked; } }), ' Residents change outfits by weather/time'),
+          h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.nightMischief !== false, onchange: (e) => { st.nightMischief = e.target.checked; } }), ' 🌙 Night mischief (residents sometimes sneak out at night)'),
+          h('div', { class: 'row' }, h('span', { class: 'lbl' }, '🪙 Cost of living'), ...[['relaxed', 'Relaxed'], ['normal', 'Normal'], ['tight', 'Tight']].map(([k, label]) => h('button', { class: `small ${(st.economy || 'normal') === k ? 'active' : ''}`, onclick: () => { st.economy = k; render(); } }, label))),
           (() => {
             const pct = (v) => `${Math.round((v ?? 0.05) * 100)}%`;
             const out = h('span', { class: 'lbl' }, pct(st.underwearRate));
@@ -116,6 +161,11 @@ export function openSettings(app, focus) {
         );
         right.append(h('h3', {}, 'Audio & view'));
         right.append(
+          (() => {
+            const out = h('span', { class: 'lbl' }, `${Math.round((st.nightBrightness ?? 0.5) * 100)}%`);
+            return h('div', { class: 'row' }, h('span', { class: 'lbl' }, '🌙 Night brightness'),
+              h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: st.nightBrightness ?? 0.5, oninput: (e) => { st.nightBrightness = +e.target.value; out.textContent = `${Math.round(st.nightBrightness * 100)}%`; } }), out);
+          })(),
           h('label', { class: 'tag' }, h('input', { type: 'checkbox', checked: st.music, onchange: (e) => { st.music = e.target.checked; sim.audio.setMusic(st.music); } }), ' Music'),
           h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Master'), h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: st.volume, oninput: (e) => { st.volume = +e.target.value; sim.audio.setVolume(st.volume); } })),
           ...[['voiceVolume', 'voice', '🗣️ Voices'], ['musicVolume', 'music', '🎵 Music'], ['ambientVolume', 'ambient', '🌧️ Ambient & effects']].map(([key, ch, label]) =>
@@ -176,6 +226,7 @@ export class BuildMode {
       h('button', { class: this.erase ? 'active' : '', onclick: () => { this.erase = !this.erase; this.clearGhost(); this.renderBar(); } }, h('span', { class: 'ic' }, '🧹'), 'Remove'),
       h('button', { onclick: () => { this.rot += Math.PI / 4; } }, h('span', { class: 'ic' }, '🔄'), 'Rotate (R)'),
       h('button', { onclick: () => this.surfaceMenu() }, h('span', { class: 'ic' }, '🖼️'), 'Surfaces'),
+      h('button', { onclick: () => openBudget(this.app) }, h('span', { class: 'ic' }, '🏗️'), 'Venues'),
       h('button', { class: 'primary', onclick: () => this.toggle(false) }, h('span', { class: 'ic' }, '✔'), 'Done'),
     );
   }
@@ -236,6 +287,7 @@ export class BuildMode {
     if (sim.island.isBlocked(point.x, point.z, 0.3)) return toast('Something is in the way.');
     if (sim.money < 10) return toast('Each decoration costs 10 🪙.');
     sim.money -= 10;
+    sim.economy.paid(10, 'decorations');
     sim.island.placeProp(this.type, point.x, point.z, this.rot);
     sim.audio.pop();
   }

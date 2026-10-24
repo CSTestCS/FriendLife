@@ -188,7 +188,7 @@ export class Problems {
     let solved = true;
     const reward = () => {
       const coins = Math.round(rand(20, 60));
-      sim.money += coins;
+      sim.economy.earn(coins, "helping out");
       sim.gainXp(res, 25);
       sim.progress?.add(20, 'helped a resident');
       res.d.happiness = clamp(res.d.happiness + 10, 0, 100);

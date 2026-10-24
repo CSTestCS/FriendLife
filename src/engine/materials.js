@@ -237,3 +237,76 @@ export function applyMToonWet(mat, wet, tint) {
   mat.parametricRimFresnelPowerFactor = b.rimPower + (3.5 - b.rimPower) * wet;
   mat.parametricRimLiftFactor = b.rimLift + (0.05 - b.rimLift) * wet;
 }
+
+// ---------------------------------------------------------------------
+// Always-shiny fabrics: a texture with "metallic" or "silk" in its name.
+// They keep their own (steady) shine and ignore the wet look entirely.
+
+/** 'metallic' | 'silk' | null from a texture / asset name. */
+export function shineKind(name) {
+  const n = String(name || '').toLowerCase();
+  if (n.includes('metallic')) return 'metallic';
+  if (n.includes('silk')) return 'silk';
+  return null;
+}
+
+const shineMatcaps = {};
+function getShineMatcap(kind) {
+  if (shineMatcaps[kind]) return shineMatcaps[kind];
+  const size = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, size, size);
+  if (kind === 'metallic') {
+    // chrome: bright sky band, dark horizon line, hard hotspot
+    let grad = g.createLinearGradient(0, 0, 0, size);
+    grad.addColorStop(0, 'rgba(235,240,250,0.95)');
+    grad.addColorStop(0.45, 'rgba(150,160,175,0.6)');
+    grad.addColorStop(0.52, 'rgba(25,25,30,0.9)');
+    grad.addColorStop(1, 'rgba(110,100,90,0.55)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2); g.fill();
+    grad = g.createRadialGradient(size * 0.36, size * 0.3, 0, size * 0.36, size * 0.3, size * 0.12);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+  } else {
+    // silk: soft, wide sheen across the folds
+    const grad = g.createRadialGradient(size * 0.45, size * 0.38, 2, size * 0.5, size * 0.5, size * 0.6);
+    grad.addColorStop(0, 'rgba(255,250,245,0.7)');
+    grad.addColorStop(0.45, 'rgba(210,200,195,0.32)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  shineMatcaps[kind] = t;
+  return t;
+}
+
+/** Steady shine on a prepared MToon material (silk is softer than metallic). */
+export function applyMToonShine(mat, kind, tint) {
+  const b = mat.userData.wetBase;
+  if (!b) return;
+  mat.color.copy(b.color);
+  mat.shadeColorFactor.copy(b.shade);
+  if (tint) { mat.color.multiply(tint); mat.shadeColorFactor.multiply(tint); }
+  const tex = getShineMatcap(kind);
+  if (mat.matcapTexture !== tex) mat.matcapTexture = tex;
+  mat.matcapFactor.setScalar(kind === 'metallic' ? 0.85 : 0.4);
+  mat.parametricRimColorFactor.copy(b.rim).lerp(_c.setRGB(1, 1, 1), kind === 'metallic' ? 0.35 : 0.2);
+  mat.parametricRimFresnelPowerFactor = kind === 'metallic' ? 4 : 2.5;
+  mat.parametricRimLiftFactor = b.rimLift;
+}
+
+/** Standard (PBR) materials: metal / satin. */
+export function applyPBRShine(mat, kind) {
+  mat.userData.baseRM ||= { r: mat.roughness, m: mat.metalness };
+  if (kind === 'metallic') { mat.roughness = 0.22; mat.metalness = 0.9; }
+  else if (kind === 'silk') { mat.roughness = 0.38; mat.metalness = 0.15; }
+  else { mat.roughness = mat.userData.baseRM.r; mat.metalness = mat.userData.baseRM.m; }
+}

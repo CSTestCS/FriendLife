@@ -7,6 +7,7 @@ import { WEATHER_TYPES } from '../engine/weather.js';
 import { personalityLabel } from '../sim/data.js';
 import { PROBLEM_DEFS } from '../sim/problems.js';
 import { jobTitle } from '../sim/jobs.js';
+import { openBudget } from './misc.js';
 
 const _v = new THREE.Vector3();
 
@@ -32,7 +33,7 @@ export class Hud {
     bar.innerHTML = '';
     this.clockEl = h('div', { class: 'clock' });
     this.weatherEl = h('div', { class: 'chip', title: 'Weather (click for settings)', style: { cursor: 'pointer' }, onclick: () => this.app.openSettings('weather') });
-    this.moneyEl = h('div', { class: 'chip', title: 'Coins' });
+    this.moneyEl = h('div', { class: 'chip', title: 'Coins (click for the budget & venues)', style: { cursor: 'pointer' }, onclick: () => openBudget(this.app) });
     this.levelEl = h('div', { class: 'chip', title: 'Island level (click for progress & unlocks)', style: { cursor: 'pointer' }, onclick: () => openProgress(this.app) });
     const speeds = [0, 1, 2, 4, 8];
     this.speedBtns = speeds.map((s) => h('button', { class: 'small', title: s === 0 ? 'Pause (Space)' : `${s}x speed`, onclick: () => this.app.setSpeed(s) }, s === 0 ? '⏸' : `${s}x`));
@@ -58,6 +59,7 @@ export class Hud {
     this.weatherEl.textContent = `${w.icon} ${w.label}${sim.weather.wetness > 0.3 ? ' · 💧wet' : ''}`;
     this.weatherEl.title = sim.weather.locked ? 'Weather locked (Settings)' : `Forecast: ${next?.icon} ${next?.label} later`;
     this.moneyEl.textContent = `🪙 ${Math.floor(sim.money)}`;
+    this.moneyEl.classList.toggle('bad', sim.money < 0);
     const pr = sim.progress;
     this.levelEl.innerHTML = `🏝️ Lv ${pr.level} <span class="lvbar"><i style="width:${Math.round(pr.pct * 100)}%"></i></span>`;
     this.speedBtns.forEach((b, i) => b.classList.toggle('active', [0, 1, 2, 4, 8][i] === sim.speed));

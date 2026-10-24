@@ -46,6 +46,7 @@ input[type=color] { width: 34px; height: 26px; border: 2px solid var(--line); bo
 }
 #topbar .clock { font-weight: 900; font-size: 18px; min-width: 150px; text-align: center; }
 #topbar .chip { background: #fff3e4; border-radius: 999px; padding: 4px 10px; font-weight: 800; }
+#topbar .chip.bad { background: #ffd6d6; color: #b3261e; }
 #topbar .sep { width: 2px; height: 22px; background: var(--line); }
 #topbar button { border-radius: 999px; padding: 6px 10px; }
 

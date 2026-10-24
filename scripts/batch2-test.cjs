@@ -264,7 +264,9 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     r.d.mishap = null; r.activity = null; r.sleeping = false; r.morningPending = false; r.errand = null;
     const tryLeave = (rate) => {
       s.settings.underwearRate = rate;
-      if (r.inside !== r.homeKey) r.enter(r.homeKey, 30);
+      s.clock = Math.floor(s.clock / 1440) * 1440 + 12 * 60;
+      if (r.inside !== r.homeKey) { if (r.inside) r.exit(); r._enterRoom(r.homeKey, 30); }
+      r.leaving = false; r.route = null;
       r.d.wearing = 0; r.errand = null; r.turnedBackAt = null; r.leaveCheckAt = null;
       r.insideUntil = s.clock;
       r.update(0.016, 0);
@@ -359,7 +361,8 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     const argue = s.social.start(a, cop, 'argue');
     const chatWith = s.social.start(a, cop, 'chat');
     if (chatWith) chatWith.finish(true);
-    a.placeAt(cop.x + 4, cop.z); b.placeAt(cop.x + 4.8, cop.z);
+    // out in the open (south of the plaza) so nothing is in the officer's way
+    cop.placeAt(2, 12); a.placeAt(6, 12); b.placeAt(6.8, 12);
     s.settings.conflict = 'spicy';
     const f = s.fights.start(a, b, 'argument');
     window.__fight = f; window.__cop = cop;
@@ -372,12 +375,14 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     broken = await ev(() => { const s = window.__friendlife.sim; s.perMinute(1); return window.__fight.done; });
   }
   const news = await ev(() => window.__friendlife.sim.newsLog.slice(0, 5).map((n) => n.text).join(' | '));
-  check('police officer breaks up fights', broken && /broke up a fight/.test(news), news);
+  const fdbg = await ev(() => { const f = window.__fight; const c = window.__cop; return { done: f?.done, events: f?.events?.slice(-4), cop: { x: c.x.toFixed(1), z: c.z.toFixed(1), working: c.working, inside: c.inside, plan: c.plan.map((p) => p.kind), eng: c.engaged?.kind ?? (c.engaged?.isFight ? 'fight' : null) }, center: f?.center && [f.center.x.toFixed(1), f.center.z.toFixed(1)] }; });
+  check('police officer breaks up fights', broken && /broke up a fight/.test(news), news + ' ' + JSON.stringify(fdbg));
 
   // ---------------------------------------------------------------- culling
   const cull = await ev(() => {
     const a = window.__friendlife;
     const s = a.sim;
+    if (s.viewRoom) a.leaveRoom();
     const cam = a.stage.camera;
     const c = a.stage.controls;
     c.target.set(200, 0, 200);
@@ -388,9 +393,11 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     c.target.set(0, 0, 5);
     cam.position.set(0, 30, 45);
     c.update();
+    const someone = s.residents.find((r) => !r.inside);
+    someone?.placeAt(1, 8);
     s.updateVisibility();
     const shown = s.residents.filter((r) => !r.inside && r.avatar && r.avatar.root.visible).length;
-    return { outside: s.residents.filter((r) => !r.inside).length, hidden, shown };
+    return { outside: s.residents.filter((r) => !r.inside).length, hidden, shown, vr: s.viewRoom?.key || null, someone: someone && { inView: someone.inView, vis: someone.avatar?.root.visible, inside: someone.inside, parent: someone.group.parent?.name } };
   });
   check('residents outside the camera view aren\'t rendered', cull.hidden === cull.outside && cull.shown > 0, JSON.stringify(cull));
   // bookshelf screenshot

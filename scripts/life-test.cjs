@@ -271,7 +271,7 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
       const condoFolks = s.residents.filter((r) => s.condo.unitOf(r.id) != null);
       return { n: s.residents.length, houses: s.island.houses.filter((h) => h.owner).length, condo: condoFolks.map((r) => `${r.name}#${s.condo.unitLabel(s.condo.unitOf(r.id))}`), shown: !!s.island.condoShown, chain: s.rooms.chain(`home:${condoFolks[0]?.id}`) };
     });
-    check('houses capped at 10, rest in condo', c0.houses === 10 && c0.condo.length === 3 && c0.shown, JSON.stringify(c0));
+    check('everyone has a condo apartment', c0.houses === 0 && c0.condo.length === c0.n && c0.shown, JSON.stringify(c0));
     check('apartment reached via lobby + hallway', c0.chain.join('>') === 'condo>hall:1>' + c0.chain[2], c0.chain.join('>'));
     // send one home and follow them through the rooms
     await ev(() => {

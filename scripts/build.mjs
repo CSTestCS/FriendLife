@@ -18,7 +18,7 @@ const options = {
   outfile: 'dist/bundle.js',
   target: ['chrome120'],
   sourcemap: true,
-  minify: !watch,
+  minify: !watch && !process.env.NOMINIFY,
   legalComments: 'none',
   logLevel: 'info',
 };

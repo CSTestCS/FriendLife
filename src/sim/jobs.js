@@ -165,7 +165,7 @@ export function updateJobs(sim, min) {
     if (!r.working) continue;
     const job = r.d.job;
     const pay = (jobWage(r) / 60) * min;
-    sim.money += pay;
+    sim.economy.earn(pay, "wages");
     job.earned = (job.earned || 0) + pay;
     job.xp = (job.xp || 0) + min * residentPerks(r.d.level).promoMul;
     r.d.needs.energy = clamp(r.d.needs.energy - min * 0.02, 0, 100);

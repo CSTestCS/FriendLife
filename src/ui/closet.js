@@ -43,7 +43,8 @@ export function closetSection(app, res, rerender) {
   const main = outfitMeta(res, -1);
   wrap.append(row(main.name || 'Main look', `${mainName} ${tagIcons(main)}${percIcons(main)}`, -1));
   outfits.forEach((o, i) => {
-    const model = o.look.kind === 'vrm' ? lib.displayName(o.look.assetId) : 'doll';
+    const ol = o.look || res.d.look; // no model of its own: same body as the main look
+    const model = ol.kind === 'vrm' ? lib.displayName(ol.assetId) : 'doll';
     wrap.append(row(o.name, `${model} ${tagIcons(o)}${percIcons(o)}`, i));
   });
   if (res.d.mishap) wrap.append(h('div', { class: 'hint' }, `👗 Mishap: ${res.d.mishap.type}${res.d.mishap.owned ? ' (owning it 😎)' : ''}`));
@@ -129,7 +130,7 @@ function editOutfit(app, res, idx, rerender) {
     body: (b) => {
       if (!isMain) {
         b.append(h('div', { class: 'field' }, h('label', {}, 'Name'), h('input', { type: 'text', value: o.name, oninput: (e) => { o.name = e.target.value || o.name; } })));
-        if (o.look.kind === 'vrm') {
+        if (o.look?.kind === 'vrm') {
           const vars = lib.variants(o.look.assetId);
           b.append(h('div', { class: 'field' }, h('label', {}, `Model: ${lib.displayName(o.look.assetId)} — variant`),
             select([['', 'Default'], ...vars.map((v) => [v.id, v.name])], o.look.variantId || '', (v) => { o.look.variantId = v || null; })));

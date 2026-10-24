@@ -2,6 +2,7 @@
 // avatar or outfit, live. Save the result just for this resident, or as a
 // named variant of the character / outfit asset so others can reuse it.
 import { h, openModal, toast, pickFiles, prompt, esc } from './dom.js';
+import { outfitMeta, outfitName } from '../sim/outfits.js';
 
 export function openWardrobe(app, res, onDone) {
   const sim = app.sim;
@@ -9,6 +10,8 @@ export function openWardrobe(app, res, onDone) {
   if (!res.avatar) return toast('Avatar still loading…');
   const ap = res.appearance(); // main look or the personal outfit being worn
   const before = JSON.stringify(ap.custom);
+  const wornIndex = res.d.wearing ?? -1;
+  const origVariants = { look: (ap.look || res.d.look)?.variantId ?? null, outfit: ap.outfit?.variantId ?? null };
   // Work on the per-resident override layer, starting from the composed look so
   // variant values are visible and editable.
   const work = res.composeLook({ mishap: false });
@@ -55,7 +58,8 @@ export function openWardrobe(app, res, onDone) {
       render();
     },
     foot: (f) => {
-      const isVrm = ap.look.kind === 'vrm' && ap.look.assetId;
+      const apLook = ap.look || res.d.look;
+      const isVrm = apLook.kind === 'vrm' && apLook.assetId;
       f.append(...[
         h('button', { onclick: () => { work.textures = {}; work.tints = {}; work.hidden = []; apply(); m.close(); openWardrobe(app, res, onDone); } }, 'Reset all'),
         isVrm ? h('button', { onclick: () => saveVariant('character') }, '💾 Save as character variant') : null,
@@ -77,7 +81,7 @@ export function openWardrobe(app, res, onDone) {
     // everything edited lives in the resident's custom layer; variant selections are cleared
     // so what you see is exactly what is stored.
     ap.custom = JSON.parse(JSON.stringify(work));
-    if (ap.look.kind === 'vrm') ap.look.variantId = null;
+    if (ap.look?.kind === 'vrm') ap.look.variantId = null;
     if (ap.outfit) ap.outfit.variantId = null;
     res.applyLook();
   }
@@ -94,9 +98,11 @@ export function openWardrobe(app, res, onDone) {
       hidden: work.hidden.filter((k) => isOutfit === k.startsWith('outfit:')).map((k) => (isOutfit ? k.slice(7) : k)),
       thin: work.thin.filter((k) => isOutfit === k.startsWith('outfit:')).map((k) => (isOutfit ? k.slice(7) : k)),
     };
-    const assetId = isOutfit ? ap.outfit.assetId : ap.look.assetId;
+    const apLook = ap.look || res.d.look;
+    const assetId = isOutfit ? ap.outfit.assetId : apLook.assetId;
     const v = await lib.saveVariant(assetId, look);
     // switch the resident to use the variant and drop the duplicated overrides
+    if (!ap.look) ap.look = JSON.parse(JSON.stringify(res.d.look));
     if (isOutfit) ap.outfit.variantId = v.id; else ap.look.variantId = v.id;
     const keep = (k) => isOutfit !== k.startsWith('outfit:');
     ap.custom = {
@@ -106,8 +112,35 @@ export function openWardrobe(app, res, onDone) {
       thin: work.thin.filter(keep),
       mishapHide: work.mishapHide, // which parts can be lost in a mishap stays with this resident's outfit
     };
-    await res.applyLook();
-    toast(`Saved variant “${name}” — other residents can use it too.`);
+    // the restyled look also goes into their closet as a new outfit (same name and
+    // "wear when…" tags as the one edited); the edited outfit goes back to how it was
+    const baseName = wornIndex >= 0 ? outfitName(res, wornIndex) : (res.d.mainOutfit?.name || 'Main look');
+    const closetName = await prompt('Add it to their closet as', baseName);
+    if (closetName) {
+      const meta = outfitMeta(res, wornIndex);
+      const newOutfit = {
+        name: closetName,
+        look: JSON.parse(JSON.stringify(ap.look || res.d.look)),
+        outfit: ap.outfit ? JSON.parse(JSON.stringify(ap.outfit)) : null,
+        custom: JSON.parse(JSON.stringify(ap.custom)),
+        tags: [...(meta?.tags || [])],
+        perception: JSON.parse(JSON.stringify(meta?.perception || { self: [], others: [] })),
+      };
+      ap.custom = JSON.parse(before);
+      if (ap.look) ap.look.variantId = origVariants.look;
+      if (ap.outfit) ap.outfit.variantId = origVariants.outfit;
+      res.d.outfits ||= [];
+      res.d.outfits.push(newOutfit);
+      res.d.manualUntil = sim.clock + 180;
+      await sim.changeOutfit(res, res.d.outfits.length - 1, { quiet: true, force: true });
+      sim.emit('resident', res);
+      toast(`Saved variant “${name}” and added “${closetName}” to ${res.name}'s closet.`);
+    } else {
+      await res.applyLook();
+      toast(`Saved variant “${name}” — other residents can use it too.`);
+    }
+    changed = false;
     sim.problems.newLook(res);
+    m.close();
   }
 }

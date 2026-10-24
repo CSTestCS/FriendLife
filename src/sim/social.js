@@ -122,7 +122,7 @@ export class Interaction {
       if (!r.changeAfterChat) continue;
       r.changeAfterChat = false;
       if (r.working) { r.say('I\'ll fix it after my shift...', { emoji: '😣' }); continue; }
-      setTimeout(() => { if (sim.residents.includes(r) && !r.engaged) sim.goChange(r, { avoidEmbarrassing: true, say: false }); }, 800);
+      setTimeout(() => { if (sim.residents.includes(r) && !r.engaged) sim.coverUp(r); }, 800);
     }
   }
 }
@@ -422,6 +422,11 @@ export class Social {
 
   start(a, b, kind, opts = {}) {
     if (!a || !b || a === b) return null;
+    // gossip needs someone to gossip about
+    if (kind === 'gossip' && !opts.c) {
+      const c = this.sim.residents.find((x) => x !== a && x !== b && a.relScore(x.id) < 5 && a.rel(x.id).met);
+      if (c) opts = { ...opts, c }; else kind = 'chat';
+    }
     if (a.engaged || b.engaged || a.ko || b.ko) return null;
     // people on the clock don't start conversations themselves; someone off the clock
     // may come up to them for a friendly word (the player can still set anything up)

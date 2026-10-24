@@ -1,7 +1,8 @@
 // What residents do while inside a room instance.
 import { chance, clamp, rand, weightedPick } from '../core/util.js';
 import { isOnShift, JOBS } from './jobs.js';
-import { causeMishap, underwearLeaveRate } from './outfits.js';
+import { causeMishap, underwearLeaveRate, preferredOutfit } from './outfits.js';
+import { isBedtime, bedtimeAtHome } from './brain.js';
 import { pick } from '../core/util.js';
 
 /**
@@ -160,7 +161,15 @@ export function thinkIndoors(res, sim, room) {
   switch (room.kind) {
     case 'home': {
       const isHome = res.inside === `home:${res.id}`;
+      // home in the evening: it's bedtime (routine, sleepwear) rather than just lying down
+      if (isHome && !res.sleeping && !res.nightOut && isBedtime(res, sim) && !(res.d.job && isOnShift(res, sim))) bedtimeAtHome(res, sim);
       if (isHome && routines(res, sim, room)) return;
+      // got up and changed during the night (or never changed): back into sleepwear first
+      if (isHome && res.sleeping && res.bedtimeDone && res.d.outfits?.length && !res.changing && res.sleepDressAt !== res.wakeAt) {
+        res.sleepDressAt = res.wakeAt;
+        const want = preferredOutfit(res, sim, { activity: 'sleep' });
+        if (want !== res.d.wearing && go(room.freeSpot('closet'), 3, { anim: 'dress', emoji: '👚', then: () => sim.dressAtWardrobe(res, { ctx: { activity: 'sleep' } }) })) return;
+      }
       if (res.sleeping || (isHome && (hour >= 22.5 || hour < 6))) {
         // sleep until the alarm (the morning routine starts right after)
         const nap = res.sleeping && Number.isFinite(res.wakeAt) ? clamp(res.wakeAt - sim.clock, 3, 120) : rand(60, 120);
