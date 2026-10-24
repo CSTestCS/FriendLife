@@ -14,7 +14,7 @@ import { Condo } from './condo.js';
 import { updatePriorRelations } from './relations.js';
 import { Progress, residentPerks, updateCelebrities } from './progress.js';
 import { updateJobs, onDuty, jobOf } from './jobs.js';
-import { preferredOutfit, updateOutfitPerception, selfMoodShift, updateMishaps, causeMishap, updateExposure, isUnderwear, embarrassingToWear, fixMishap } from './outfits.js';
+import { preferredOutfit, updateOutfitPerception, selfMoodShift, updateMishaps, causeMishap, updateExposure, isUnderwear, embarrassingToWear, fixMishap, setOutfitPurpose, mustDryFirst } from './outfits.js';
 import { INJURIES, line, NAMES, foodById, FOODS, ITEMS } from './data.js';
 import { Emitter, chance, clamp, damp, pick, rand } from '../core/util.js';
 
@@ -144,10 +144,19 @@ export class Sim extends Emitter {
   }
 
   /** Switch a resident into one of their personal outfits (-1 = main look). */
-  async changeOutfit(res, index, { quiet = false } = {}) {
+  async changeOutfit(res, index, { quiet = false, purpose, force = false } = {}) {
     if (index >= (res.d.outfits?.length || 0)) index = -1;
-    if (res.d.wearing === index && res.avatar) return;
+    if (res.d.wearing === index && res.avatar) {
+      if (purpose !== undefined) setOutfitPurpose(res, index, purpose);
+      return;
+    }
+    // wet swimwear / underwear: towel off first (stripping to underwear is fine)
+    if (!force && res.avatar && mustDryFirst(res, index)) {
+      this.towelOff(res, () => this.changeOutfit(res, index, { quiet, purpose }));
+      return;
+    }
     res.d.wearing = index;
+    setOutfitPurpose(res, index, purpose ?? null);
     // fresh clothes fix a wardrobe mishap
     if (res.d.mishap) {
       res.d.mishap = null;
@@ -187,19 +196,39 @@ export class Sim extends Emitter {
         return null;
       }
     }
-    if (want === res.d.wearing) return null;
-    if (res.changing) { res.redress = { index: want, quiet }; return null; }
+    // what they're dressing for (remembered while the outfit stays on)
+    const purpose = index != null ? null : ctx.activity || (!ctx.outside && res.inside === res.homeKey ? 'home' : null);
+    if (want === res.d.wearing) { if (purpose) setOutfitPurpose(res, want, purpose); return null; }
+    if (res.changing) { res.redress = { index: want, quiet, purpose }; return null; }
     res.changing = true;
-    return this.changeOutfit(res, want, { quiet }).finally(() => {
+    return this.changeOutfit(res, want, { quiet, purpose }).finally(() => {
       res.changing = false;
       const again = res.redress;
       res.redress = null;
-      if (again && again.index !== res.d.wearing) this.changeOutfit(res, again.index, { quiet: again.quiet });
+      if (again && again.index !== res.d.wearing) this.changeOutfit(res, again.index, { quiet: again.quiet, purpose: again.purpose });
     });
   }
 
   /** Mend a wardrobe mishap (tailor, sewing kit). */
   fixMishapFor(res) { fixMishap(this, res, true); }
+
+  /** Dry off with a towel (a few seconds), then carry on with then(). */
+  towelOff(res, then = null) {
+    if (res.dryingOff) return;
+    res.dryingOff = true;
+    const done = () => {
+      res.dryingOff = false;
+      res.d.wetness = 0;
+      res.d.soakedMinutes = 0;
+      res.d.swimWet = false;
+      res.avatar?.setWetness(0);
+      then?.();
+    };
+    res.say(pick(['Gotta dry off first!', '*towels off*', 'Can\'t get dressed dripping wet!']), { emoji: '🧺', sound: false });
+    res.plan.unshift({ kind: 'anim', anim: 'dress', dur: 4, emoji: '🧺', then: done });
+    // if something interrupts them, they can try again later
+    setTimeout(() => { if (res.dryingOff && !res.plan.length && !res.step) res.dryingOff = false; }, 15000);
+  }
 
   /** Would the resident wear something else for this? (outfit index or null) */
   outfitFor(res, ctx) {
@@ -219,7 +248,7 @@ export class Sim extends Emitter {
     if (target != null && target !== res.d.wearing && isUnderwear(res, target)) {
       if (activity !== undefined) res.activity = activity;
       res.lastDressTrip = this.clock;
-      this.changeOutfit(res, target, { quiet: true }).then(() => after?.());
+      this.changeOutfit(res, target, { quiet: true, purpose: activity ?? res.activity ?? null }).then(() => after?.());
       return true;
     }
     if (!this.homeOf(res)) return false;
@@ -497,16 +526,21 @@ export class Sim extends Emitter {
     const door = this.locationDoor(loc, res);
     if (!door) return;
     if (res.engaged) { this.social.cancelFor(res); }
-    if (res.inside) res.exit();
-    res.clearPlan();
-    res.setPlan([{ kind: 'walk', x: door[0], z: door[1] }, { kind: 'enter', loc, minutes, onExit }]);
+    const go = () => {
+      const d = this.locationDoor(loc, res) || door;
+      res.clearPlan();
+      res.setPlan([{ kind: 'walk', x: d[0], z: d[1] }, { kind: 'enter', loc, minutes, onExit }]);
+    };
+    if (res.inside) res.headOut(go);
+    else go();
   }
 
   /** Have resident a go to b and start an interaction (retries if b is busy). */
   goInteract(a, b, kind, opts = {}) {
     opts = { force: true, ...opts };
     if (!a || !b) return;
-    if (a.inside) a.exit();
+    // out through the building first (unless they're in the same room)
+    if (a.inside && a.inside !== b.inside && !a.headOut(() => this.goInteract(a, b, kind, opts))) return;
     a.clearPlan();
     const attempt = (tries) => {
       if (!this.residents.includes(a) || !this.residents.includes(b)) return;

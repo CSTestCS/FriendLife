@@ -311,6 +311,24 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
       if (where === 'outside') break;
     }
     check('walks back out through hallway + lobby', seenOut.has('outside') && seenOut.has('condo'), [...seenOut].join(' > '));
+    // sent somewhere (clinic) from the apartment: still walks out through the hallway and lobby
+    await ev(() => {
+      const s = window.__friendlife.sim;
+      const r = window.__condoRes;
+      s.social.cancelFor(r); r.engaged = null; r.clearPlan();
+      if (r.inside) r.exit();
+      r._enterRoom(r.homeKey, 600);
+      s.sendTo(r, 'clinic', 30);
+      window.__sentPath = [r.inside || 'outside'];
+    });
+    for (let i = 0; i < 120; i++) {
+      await wait(1000);
+      const where = await ev(() => { const r = window.__condoRes; const w = r.inside || 'outside'; const p = window.__sentPath; if (p[p.length - 1] !== w) p.push(w); return w; });
+      if (where === 'clinic') break;
+    }
+    const sentPath = await ev(() => window.__sentPath);
+    const iOut = sentPath.indexOf('outside');
+    check('sent out from an apartment: hallway → lobby → outside (no shortcut)', iOut > 0 && sentPath.slice(0, iOut).some((k) => k.startsWith('hall:')) && sentPath[iOut - 1] === 'condo', sentPath.join(' > '));
     // views of the hallway, lobby and pool
     for (const [key, shot] of [['hall:1', 'l4-hall'], ['condo', 'l5-lobby'], ['condoPool', 'l6-pool']]) {
       await ev((k) => window.__friendlife.viewRoom(k), key);

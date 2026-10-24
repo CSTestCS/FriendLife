@@ -161,7 +161,7 @@ function editOutfit(app, res, idx, rerender) {
       isMain ? null : h('button', { class: 'danger', onclick: async () => {
         if (!(await confirmBox(`Remove “${o.name}” from ${res.name}'s closet?`, 'Remove'))) return;
         res.d.outfits.splice(idx, 1);
-        if (res.d.wearing === idx) await sim.changeOutfit(res, -1, { quiet: true });
+        if (res.d.wearing === idx) await sim.changeOutfit(res, -1, { quiet: true, force: true });
         else if (res.d.wearing > idx) res.d.wearing--;
         m.close();
         rerender();

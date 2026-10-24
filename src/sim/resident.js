@@ -559,6 +559,27 @@ export class Resident {
     if (cb) cb();
   }
 
+  /**
+   * Leave the building the way you came in: from an apartment that means the
+   * hallway, then the lobby, then out. then() runs once outside. Returns true
+   * if they're already out.
+   */
+  headOut(then = null) {
+    if (!this.inside) { then?.(); return true; }
+    if (this.room && this.sim.rooms?.parentOf(this.inside)) {
+      this.clearPlan();
+      this.leaveSeat();
+      this.route = null;
+      this.leaving = true;
+      this.insideUntil = Infinity;
+      this.onExit = then;
+      return false;
+    }
+    this.exit();
+    then?.();
+    return true;
+  }
+
   exit() {
     if (!this.inside) return;
     this.leaveSeat();
@@ -659,7 +680,7 @@ export class Resident {
     // indoors: time to leave? (nested rooms are walked out of by the room brain)
     if (this.inside) {
       if (!this.engaged && sim.clock >= this.insideUntil) {
-        if (this.inside === this.homeKey && this.room && (this.sleeping || this.morningPending || this.activity === 'sleep' || this.errand)) {
+        if (this.inside === this.homeKey && this.room && (this.sleeping || this.morningPending || this.activity === 'sleep' || this.errand || this.dryingOff)) {
           // never head out still half asleep / mid-change: finish getting ready first
           if (this.sleeping && !(this.wakeAt <= sim.clock)) this.wakeAt = sim.clock;
           if (this.activity === 'sleep' && !this.sleeping) this.morningPending = true;

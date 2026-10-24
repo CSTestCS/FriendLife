@@ -87,6 +87,39 @@ export function underwearShowing(res, idx = res.d.wearing ?? -1) {
   return /underwear/i.test(n) || /incomplete/i.test(n);
 }
 
+// Why they put on what they're wearing ('swim', 'exercise', 'work', 'home'…).
+// Remembered for as long as that outfit stays on, so someone walking back
+// from the beach in their swimwear knows why they're in it.
+const PLACE_BOUND = new Set(['home', 'sleep']); // only makes sense at home
+
+/** Remember why they changed into outfit `index` (null = no particular reason). */
+export function setOutfitPurpose(res, index, why) {
+  res.d.outfitPurpose = why ? { why, index } : null;
+}
+
+/** The reason they're wearing the current outfit, if it still holds here. */
+export function outfitPurpose(res, { anywhere = false } = {}) {
+  const p = res.d.outfitPurpose;
+  if (!p || p.index !== (res.d.wearing ?? -1)) return null;
+  if (!anywhere && PLACE_BOUND.has(p.why) && res.inside !== res.homeKey) return null;
+  return p.why;
+}
+
+/** Swimwear: an outfit tagged for swimming. */
+export function isSwimwear(res, idx = res.d.wearing ?? -1) {
+  return !!outfitMeta(res, idx)?.tags?.includes('swim');
+}
+
+/**
+ * Wet in underwear or swimwear: they have to dry off before putting on
+ * anything else (stripping down to underwear is always fine).
+ */
+export function mustDryFirst(res, target) {
+  if ((res.d.wetness || 0) < 0.25 || target === res.d.wearing) return false;
+  if (!(isUnderwear(res) || isSwimwear(res) || underwearShowing(res))) return false;
+  return !isUnderwear(res, target);
+}
+
 /** Out where others can see (not at home, not swimming). */
 export function inPublic(res) {
   if (res.inside && res.inside === res.homeKey) return false;
@@ -275,7 +308,8 @@ export function updateExposure(sim, min) {
     if (r.engaged || r.ko || !r.avatar || r.sleeping || (r.inside && !r.room)) continue;
     if (!inPublic(r)) continue;
     const showing = underwearShowing(r);
-    const embarrassed = embarrassingToWear(r);
+    // dressed like this on purpose (swimwear on the way back from the beach…): no shock
+    const embarrassed = embarrassingToWear(r) && (!!r.d.mishap || !outfitPurpose(r));
     if (!showing && !embarrassed) continue;
     const near = sim.residents.filter((o) => o !== r && !o.engaged && !o.ko && !o.sleeping && (o.inside || null) === (r.inside || null) && sim.dist(o, r) < 7);
     if (!near.length) continue;
@@ -467,6 +501,9 @@ const ACT_TAG = { swim: 'swim', sleep: 'sleep', exercise: 'exercise', dance: 'pa
 export function underwearIntent(sim, res) {
   const m = res.d.mishap;
   if (m) return m.owned ? 'own' : null;
+  // they remember why they put it on (e.g. walking back from a swim)
+  const why = outfitPurpose(res);
+  if (why) return why;
   const tags = outfitMeta(res, res.d.wearing ?? -1)?.tags || [];
   if (res.inWater || res.activity === 'swim') return tags.includes('swim') || res.inWater ? 'swim' : null;
   const act = res.activity || (res.working ? 'work' : null);
@@ -477,7 +514,7 @@ export function underwearIntent(sim, res) {
 }
 
 const ACK = {
-  swim: ['Yep! I\'m going swimming.', 'It\'s swimwear, silly!', 'Perfect for a dip!'],
+  swim: ['It\'s swimwear, silly!', 'I\'m swimming today!', 'Beach day! 🏖️'],
   sleep: ['I\'m about to go to bed!', 'It\'s what I sleep in~', 'Bedtime soon!'],
   home: ['I\'m just relaxing at home~', 'My house, my rules!', 'Comfy at home!'],
   exercise: ['It\'s my workout gear!', 'Easier to move in!', 'Workout time!'],
@@ -541,6 +578,9 @@ export function underdressedToLeave(res) {
   const tags = outfitMeta(res, res.d.wearing ?? -1)?.tags || [];
   const act = res.activity && res.activity !== 'sleep' ? res.activity : null;
   if (act && tags.includes(ACT_TAG[act])) return false;
+  // changed into it for something they do out there (a swim, a workout…)
+  const why = outfitPurpose(res, { anywhere: true });
+  if (why && !PLACE_BOUND.has(why)) return false;
   return true;
 }
 

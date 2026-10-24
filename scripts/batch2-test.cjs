@@ -280,6 +280,48 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
   check('rate 0%: turns back at the door to get dressed', lv.never.stillHome && lv.never.errand === 'dress', JSON.stringify(lv));
   check('rate 100%: heads out in underwear', !lv.always.errand, JSON.stringify(lv));
 
+  // ---------------------------------------------------------------- outfit purpose is remembered; wet swimwear needs drying
+  const pur = await ev(async () => {
+    const s = window.__friendlife.sim;
+    const r = s.residents.find((x) => !x.engaged && !x.inside) || s.residents[0];
+    const o = s.residents.find((x) => x !== r && !x.engaged);
+    for (const x of [r, o]) { s.social.cancelFor(x); x.engaged = null; x.clearPlan(); if (x.inside) x.exit(); x.thinkTimer = 9999; }
+    r.d.outfits = [{ name: 'Underwear', tags: ['swim'], perception: { self: [], others: [] } }];
+    r.d.wearing = -1; r.d.mishap = null; r.d.autoOutfits = false;
+    // strips down for a swim…
+    r.activity = 'swim';
+    s.goChange(r, { activity: 'swim' });
+    await new Promise((q) => setTimeout(q, 1500));
+    // …and is on the way back: the swim is over
+    r.activity = null; r.inWater = false;
+    const { underwearIntent, updateExposure, outfitPurpose } = window.__friendlifeOutfits || {};
+    const intent = underwearIntent ? underwearIntent(s, r) : null;
+    // seen in public: not shocked, no dash home
+    o.placeAt(r.x + 1, r.z); r.lastDressTrip = -1e9; r.errand = null;
+    for (let k = 0; k < 40; k++) updateExposure(s, 1);
+    const shocked = !!r.errand;
+    // wet: has to towel off before getting dressed; stripping to underwear is fine
+    r.d.wetness = 1;
+    r.enter(r.homeKey, 60);
+    r.clearPlan();
+    await s.changeOutfit(r, -1, { quiet: true });
+    const blocked = { wearing: r.d.wearing, towel: r.plan.some((st) => st.emoji === '🧺') };
+    // play the towel step out (the sandbox renders too slowly to wait for it)
+    for (let k = 0; k < 6 && r.d.wearing !== -1; k++) { r._runPlan(2); await new Promise((q) => setTimeout(q, 300)); }
+    const after = { wearing: r.d.wearing, wet: r.d.wetness, step: r.step?.kind, drying: r.dryingOff };
+    r.d.outfits.push({ name: 'Swimsuit', tags: ['swim'], perception: { self: [], others: [] } });
+    await s.changeOutfit(r, 1, { quiet: true, force: true });
+    r.d.wetness = 1;
+    await s.changeOutfit(r, 0, { quiet: true });
+    const strip = r.d.wearing;
+    r.d.autoOutfits = true; r.d.outfits = []; r.d.wearing = -1; r.d.wetness = 0;
+    await s.changeOutfit(r, -1, { quiet: true, force: true });
+    return { purpose: r.d.outfitPurpose, intent, shocked, blocked, after, strip };
+  });
+  check('remembers stripping down to swim (acknowledges, not shocked)', pur.intent === 'swim' && !pur.shocked, JSON.stringify(pur));
+  check('wet in swimwear/underwear: towels off before dressing', pur.blocked.wearing === 0 && pur.blocked.towel && pur.after.wearing === -1 && pur.after.wet === 0, JSON.stringify(pur));
+  check('wet: can still strip to underwear', pur.strip === 0, JSON.stringify(pur));
+
   // ---------------------------------------------------------------- progression
   const pg = await ev(() => {
     const s = window.__friendlife.sim;

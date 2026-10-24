@@ -118,9 +118,11 @@ export class Fight {
       res.engaged = null;
       res.say(pick(['I\'m outta here!', 'Waaah!', 'Leave me alone!']), { emoji: '💨' });
       res.setExpression({ sad: 1, surprised: 0.4 });
-      if (res.inside) res.exit(); // run out of the building first
       const home = sim.homeOf(res);
-      if (home) res.setPlan([{ kind: 'walk', x: home.door[0], z: home.door[1], run: true }, { kind: 'enter', loc: `home:${res.id}`, minutes: rand(60, 120) }]);
+      const run = () => { if (home && !res.inside) res.setPlan([{ kind: 'walk', x: home.door[0], z: home.door[1], run: true }, { kind: 'enter', loc: `home:${res.id}`, minutes: rand(60, 120) }]); };
+      if (res.inside && res.sim.rooms?.chain(res.homeKey).includes(res.inside)) res.enter(res.homeKey, rand(60, 120)); // already in their own building: run home through it
+      else if (res.inside) res.headOut(run); // run out of the building first
+      else run();
       this.events.push(`${res.name} ran away`);
       return;
     }

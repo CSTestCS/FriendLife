@@ -1,5 +1,6 @@
 // FriendLife entry point.
 import * as THREE from 'three';
+import * as outfitsDebug from './sim/outfits.js';
 import { Stage } from './engine/stage.js';
 import { Weather } from './engine/weather.js';
 import { AudioEngine } from './engine/audio.js';
@@ -60,6 +61,7 @@ class App {
     this.bindInput();
     this.loop();
     window.__friendlife = this; // handy for debugging from devtools
+    window.__friendlifeOutfits = outfitsDebug;
     await this.showTitle();
   }
 
