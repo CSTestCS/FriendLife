@@ -292,15 +292,29 @@ function getShineMatcap(kind) {
 export function applyMToonShine(mat, kind, tint) {
   const b = mat.userData.wetBase;
   if (!b) return;
+  // VRoid's rim mask texture would hide the matcap everywhere but the edges
+  if (mat.rimMultiplyTexture && !mat.userData.rimMaskWas) {
+    mat.userData.rimMaskWas = mat.rimMultiplyTexture;
+    mat.rimMultiplyTexture = null;
+    mat.needsUpdate = true;
+  }
+  mat.userData.rimMixWas ??= mat.rimLightingMixFactor;
+  mat.rimLightingMixFactor = 0.35; // shine stays visible in shade too
   mat.color.copy(b.color);
   mat.shadeColorFactor.copy(b.shade);
   if (tint) { mat.color.multiply(tint); mat.shadeColorFactor.multiply(tint); }
   const tex = getShineMatcap(kind);
   if (mat.matcapTexture !== tex) mat.matcapTexture = tex;
-  mat.matcapFactor.setScalar(kind === 'metallic' ? 0.85 : 0.4);
-  mat.parametricRimColorFactor.copy(b.rim).lerp(_c.setRGB(1, 1, 1), kind === 'metallic' ? 0.35 : 0.2);
-  mat.parametricRimFresnelPowerFactor = kind === 'metallic' ? 4 : 2.5;
+  mat.matcapFactor.setScalar(kind === 'metallic' ? 1.0 : 0.5);
+  mat.parametricRimColorFactor.copy(b.rim);
+  mat.parametricRimFresnelPowerFactor = b.rimPower;
   mat.parametricRimLiftFactor = b.rimLift;
+}
+
+/** Undo applyMToonShine's mask / mix changes (texture renamed, look reset). */
+export function clearMToonShine(mat) {
+  if (mat.userData.rimMaskWas) { mat.rimMultiplyTexture = mat.userData.rimMaskWas; mat.userData.rimMaskWas = null; mat.needsUpdate = true; }
+  if (mat.userData.rimMixWas != null) { mat.rimLightingMixFactor = mat.userData.rimMixWas; mat.userData.rimMixWas = null; }
 }
 
 /** Standard (PBR) materials: metal / satin. */

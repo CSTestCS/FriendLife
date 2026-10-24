@@ -1,6 +1,7 @@
 // Resident "problems": thought bubbles asking the player for help, like in
 // Tomodachi Life. Solving them earns money and makes residents happier.
 
+import { canRomance } from './relations.js';
 import { chance, clamp, rand, pick } from '../core/util.js';
 import { foodById, INJURIES } from './data.js';
 import { TERM_CATEGORIES } from './dialogue.js';
@@ -250,7 +251,7 @@ export class Problems {
         break;
       case 'confess:wait':
         msg = `${res.name} will wait for the right moment.`;
-        res.rel(other?.id).crush = true;
+        if (other && canRomance(res, other)) res.rel(other.id).crush = true;
         solved = false;
         break;
       case 'makeUp:apologize':

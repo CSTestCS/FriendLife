@@ -12,6 +12,7 @@ import { openVoiceEditor } from './voiceEditor.js';
 import { assignJob } from '../sim/jobs.js';
 import { askWord } from './dictionary.js';
 import { TERM_CATEGORIES } from '../sim/dialogue.js';
+import { exportCharacter } from './charIO.js';
 
 export class Panel {
   constructor(app) {
@@ -82,11 +83,13 @@ export class Panel {
       A('🎬 Animate…', () => this.animPicker()),
       A('🏥 Clinic', () => { sim.sendTo(r, 'clinic', 90, () => sim.clinicTreat(r)); toast(`${r.name} is heading to the clinic.`); }, { disabled: !r.d.injuries.length }),
       A('🏠 Go Home', () => { sim.sendTo(r, `home:${r.id}`, 120); }),
+      A('📍 Teleport…', () => this.teleportPicker(), { title: 'Stuck? Instantly send them somewhere' }),
       A('📖 Teach word', () => this.teachWord()),
       A('🎙️ Voice', () => openVoiceEditor(this.app, r.d.voice, { name: r.name, catchphrase: r.d.catchphrase })),
       r.inside && r.room ? A('👀 Look inside', () => this.app.viewRoom(r.inside)) : A('🏡 Their home', () => this.app.viewRoom(`home:${r.id}`)),
       A('👕 Wardrobe', () => this.app.openWardrobe(r)),
       A('✏️ Edit', () => this.app.openCreator(r)),
+      A('📤 Export', () => exportCharacter(this.app, r), { title: 'Save this character (look, closet, personality, voice) to a file' }),
     ));
 
     // level perks: why levelling residents matters
@@ -233,6 +236,20 @@ export class Panel {
         b.append(grid);
       },
       foot: (f) => f.append(h('button', { onclick: () => { m.close(); this.app.openShop(); } }, '🛍️ Go to shop')),
+    });
+  }
+
+  teleportPicker() {
+    const r = this.sim.selected;
+    if (!r) return;
+    const m = openModal({
+      title: `📍 Teleport ${r.name}`,
+      body: (b) => {
+        b.append(h('div', { class: 'hint' }, 'Instantly moves them there (for when someone is stuck). They drop whatever they were doing.'));
+        const grid = h('div', { class: 'row', style: { flexWrap: 'wrap', gap: '6px', marginTop: '8px' } });
+        for (const [k, label] of this.sim.teleportTargets(r)) grid.append(h('button', { class: 'small', onclick: () => { this.sim.teleport(r, k); m.close(); this.render(); } }, label));
+        b.append(grid);
+      },
     });
   }
 

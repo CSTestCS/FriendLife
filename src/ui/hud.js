@@ -8,6 +8,7 @@ import { personalityLabel } from '../sim/data.js';
 import { PROBLEM_DEFS } from '../sim/problems.js';
 import { jobTitle } from '../sim/jobs.js';
 import { openBudget } from './misc.js';
+import { importCharacter } from './charIO.js';
 
 const _v = new THREE.Vector3();
 
@@ -78,6 +79,7 @@ export class Hud {
       list.append(card);
     }
     list.append(h('div', { class: 'res-card add', onclick: () => this.app.openCreator() }, '＋ New Resident'));
+    list.append(h('div', { class: 'res-card add', title: 'Import a character exported from FriendLife', onclick: () => importCharacter(this.app) }, '📥 Import Character'));
   }
 
   statusLine(r) {

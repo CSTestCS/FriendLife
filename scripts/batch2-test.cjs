@@ -307,9 +307,14 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     r.enter(r.homeKey, 60);
     r.clearPlan();
     await s.changeOutfit(r, -1, { quiet: true });
-    const blocked = { wearing: r.d.wearing, towel: r.plan.some((st) => st.emoji === '🧺') };
-    // play the towel step out (the sandbox renders too slowly to wait for it)
-    for (let k = 0; k < 6 && r.d.wearing !== -1; k++) { r._runPlan(2); await new Promise((q) => setTimeout(q, 300)); }
+    const blocked = { wearing: r.d.wearing, towel: !!r.pendingChange && r.dryingOff };
+    // still wet a while later: still waiting
+    s.perMinute(1);
+    blocked.stillWet = r.d.wearing;
+    // dried off: the change goes through on its own
+    r.d.wetness = 0.1;
+    s.perMinute(0.1);
+    await new Promise((q) => setTimeout(q, 800));
     const after = { wearing: r.d.wearing, wet: r.d.wetness, step: r.step?.kind, drying: r.dryingOff };
     r.d.outfits.push({ name: 'Swimsuit', tags: ['swim'], perception: { self: [], others: [] } });
     await s.changeOutfit(r, 1, { quiet: true, force: true });
@@ -321,7 +326,7 @@ const check = (name, ok, extra = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} 
     return { purpose: r.d.outfitPurpose, intent, shocked, blocked, after, strip };
   });
   check('remembers stripping down to swim (acknowledges, not shocked)', pur.intent === 'swim' && !pur.shocked, JSON.stringify(pur));
-  check('wet in swimwear/underwear: towels off before dressing', pur.blocked.wearing === 0 && pur.blocked.towel && pur.after.wearing === -1 && pur.after.wet === 0, JSON.stringify(pur));
+  check('wet in swimwear/underwear: waits until dry before dressing', pur.blocked.wearing === 0 && pur.blocked.towel && pur.blocked.stillWet === 0 && pur.after.wearing === -1, JSON.stringify(pur));
   check('wet: can still strip to underwear', pur.strip === 0, JSON.stringify(pur));
 
   // ---------------------------------------------------------------- progression

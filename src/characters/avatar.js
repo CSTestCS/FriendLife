@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { BONES, buildDoll, nearestBone } from './rig.js';
 import { parseVRM, disposeVRM, releaseVRMFile } from './loaders.js';
-import { prepareMToonWet, applyMToonWet, patchWeather, shineKind, applyMToonShine, applyPBRShine } from '../engine/materials.js';
+import { prepareMToonWet, applyMToonWet, patchWeather, shineKind, applyMToonShine, clearMToonShine, applyPBRShine } from '../engine/materials.js';
 import { clamp, damp, rand } from '../core/util.js';
 
 const R180 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
@@ -389,8 +389,9 @@ export class Avatar {
         m.visible = !this.look.hidden.includes(slot.key);
         m.userData.thin = this.look.thin.includes(slot.key);
         // "metallic" / "silk" in the texture's name: always shiny
-        const texName = tex ? (textureStore?.library?.displayName?.(texId) || tex.name) : (o.map?.name || o.map?.source?.data?.name || '');
-        m.userData.shine = shineKind(texName);
+        // (imported texture's name, or the model's own texture / image name, or the part's name)
+        const texName = tex ? (textureStore?.library?.displayName?.(texId) || tex.name) : (o.map?.name || o.map?.userData?.imageName || '');
+        m.userData.shine = shineKind(texName) || (tex ? null : shineKind(slot.label) || shineKind(slot.key));
         const tint = this.look.tints[slot.key];
         m.userData.tint = tint ? new THREE.Color(tint) : null;
         if (this.kind === 'doll' && o.color) {
@@ -442,8 +443,9 @@ export class Avatar {
     for (const m of mats) {
       if (m.isMToonMaterial) {
         // shiny fabrics keep their own steady shine (the wet look leaves them alone)
-        if (m.userData.shine) applyMToonShine(m, m.userData.shine, m.userData.tint || null);
-        else applyMToonWet(m, this.wetness, m.userData.tint || null);
+        // (never on the outline pass: that only made a bright outline)
+        if (m.userData.shine && !m.isOutline) applyMToonShine(m, m.userData.shine, m.userData.tint || null);
+        else { clearMToonShine(m); applyMToonWet(m, this.wetness, m.userData.tint || null); }
         continue;
       }
       if (m.isMeshStandardMaterial) applyPBRShine(m, m.userData.shine || null);

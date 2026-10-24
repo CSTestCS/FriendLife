@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import * as outfitsDebug from './sim/outfits.js';
 import * as activitiesDebug from './sim/activities.js';
+import * as relDebug from './sim/relations.js';
+import * as charIODebug from './ui/charIO.js';
 import { Stage } from './engine/stage.js';
 import { Weather } from './engine/weather.js';
 import { AudioEngine } from './engine/audio.js';
@@ -64,6 +66,8 @@ class App {
     window.__friendlife = this; // handy for debugging from devtools
     window.__friendlifeOutfits = outfitsDebug;
     window.__friendlifeActivities = activitiesDebug;
+    window.__friendlifeRel = relDebug;
+    window.__friendlifeCharIO = charIODebug;
     await this.showTitle();
   }
 

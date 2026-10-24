@@ -65,6 +65,12 @@ export function isRelative(a, b) {
   return priorOf(a, b.id)?.type === 'relative';
 }
 
+/** Romance only happens between a man and a woman (and never within a family). */
+export function canRomance(a, b) {
+  const g = [a?.d?.gender, b?.d?.gender];
+  return g.includes('m') && g.includes('f') && !isRelative(a, b);
+}
+
 /** Label / icon for the relationship list. */
 export function priorLabel(res, otherId) {
   const p = priorOf(res, otherId);
@@ -96,13 +102,14 @@ export function setPrior(sim, a, b, type, variant) {
   else rb.score = Math.max(rb.score, 0);
   ra.grudge = def.grudge || 0;
   if (mdef) rb.grudge = mdef.grudge || 0;
-  if (def.partner) {
+  const romantic = canRomance(a, b);
+  if (def.partner && romantic) {
     // only one partner each
     for (const x of [a, b]) { const p = x.partnerId(); if (p && p !== (x === a ? b.id : a.id)) sim.social.breakUp(x, sim.byId(p), false); }
     ra.partner = rb.partner = true;
     ra.crush = rb.crush = true;
   }
-  if (def.crush) ra.crush = true;
+  if (def.crush && romantic) ra.crush = true;
   if (def.ex) { ra.ex = rb.ex = true; ra.partner = rb.partner = false; }
   if (type === 'relative') { ra.crush = rb.crush = false; ra.partner = rb.partner = false; }
   a.addMemory(`${def.label}: ${b.name}`);

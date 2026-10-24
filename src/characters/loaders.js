@@ -29,6 +29,9 @@ class SharedTexturePlugin {
     return p.then((t) => {
       if (!t) return null;
       const c = t.clone();
+      const img = this.parser.json.images?.[def.source];
+      c.name = def.name || img?.name || t.name || '';
+      c.userData.imageName = img?.name || img?.uri || '';
       this.parser.associations.set(c, { textures: index });
       return c;
     });

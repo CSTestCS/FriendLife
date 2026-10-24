@@ -689,6 +689,9 @@ export class Resident {
           // it's late: staying in for the night
         } else if (this.inside === this.homeKey && this._checkDressedToLeave()) {
           // went back to the wardrobe first
+        } else if (this.room && this.inside !== this.homeKey && this.inside.startsWith('home:') && sim.rooms?.chain(this.homeKey).includes(sim.rooms.chain(this.inside)[0]) && chance(0.5)) {
+          // visit over: back to their own apartment through the building
+          this.enter(this.homeKey, rand(30, 90));
         } else if (this.room && sim.rooms?.parentOf(this.inside)) {
           this.leaving = true;
           this.insideUntil = Infinity;
@@ -846,8 +849,13 @@ export class Resident {
     }
     const speed = this.moveSpeed();
     const step = Math.min(dist, speed * dt);
-    const nx = this.x + (dx / dist) * step;
-    const nz = this.z + (dz / dist) * step;
+    // steer around people in the way (everyone keeps to their right, so two
+    // people walking at each other pass instead of bumping)
+    let ux = dx / dist, uz = dz / dist;
+    const av = this._avoid(ux, uz, target, m);
+    if (av) { ux = av[0]; uz = av[1]; }
+    const nx = this.x + ux * step;
+    const nz = this.z + uz * step;
     this.placeAt(nx, nz, false);
     this.pushOutOfObstacles(m.x, m.z);
     this.targetHeading = Math.atan2(dx, dz);
@@ -859,6 +867,32 @@ export class Resident {
       this.slipCooldown = 3;
       if (chance(0.025 * this.sim.weather.wetness * (this.sim.settings.conflict === 'off' ? 0.3 : 1))) this.sim.slip(this);
     }
+  }
+
+  /** Direction adjusted to pass people ahead, or null if the way is clear. */
+  _avoid(ux, uz, target, m) {
+    let sx = 0, sz = 0;
+    const here = this.inside || null;
+    for (const o of this.sim.residents) {
+      if (o === this || (o.inside || null) !== here || o.ko) continue;
+      const ox = o.x - this.x, oz = o.z - this.z;
+      const ahead = ox * ux + oz * uz;
+      if (ahead < 0.15 || ahead > 2.2) continue;
+      const side = ox * -uz + oz * ux; // + = they're on our left
+      if (Math.abs(side) > 0.85) continue;
+      // they're where we're going (a chat partner, a seat neighbour): walk up to them
+      if (Math.hypot(o.x - target.x, o.z - target.z) < (m.stopDist || 0) + 0.9) continue;
+      const w = (1 - ahead / 2.2) * (1 - Math.abs(side) / 0.85);
+      // pass on our right, unless they're already on our right
+      const dir = side > 0.12 ? -1 : side < -0.12 ? 1 : -1;
+      sx += uz * -dir * w; // right-hand perpendicular of (ux, uz) is (uz, -ux)
+      sz += -ux * -dir * w;
+    }
+    if (!sx && !sz) return null;
+    const k = 1.6;
+    const vx = ux + sx * k, vz = uz + sz * k;
+    const l = Math.hypot(vx, vz) || 1;
+    return [vx / l, vz / l];
   }
 
   // ------------------------------------------------------------------ look-at (head IK)

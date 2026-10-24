@@ -11,7 +11,7 @@ import { Dialogue } from './dialogue.js';
 import { thinkIndoors } from './roomBrain.js';
 import { SwimManager } from './swim.js';
 import { Condo } from './condo.js';
-import { updatePriorRelations } from './relations.js';
+import { updatePriorRelations, canRomance } from './relations.js';
 import { Progress, residentPerks, updateCelebrities } from './progress.js';
 import { Economy, VENUES } from './economy.js';
 import { NightLife } from './night.js';
@@ -153,9 +153,11 @@ export class Sim extends Emitter {
     }
     // wet swimwear / underwear: towel off first (stripping to underwear is fine)
     if (!force && res.avatar && mustDryFirst(res, index)) {
-      this.towelOff(res, () => this.changeOutfit(res, index, { quiet, purpose }));
+      this.waitToDry(res, index, { quiet, purpose });
       return;
     }
+    res.pendingChange = null;
+    res.dryingOff = false;
     res.d.wearing = index;
     setOutfitPurpose(res, index, purpose ?? null);
     // fresh clothes fix a wardrobe mishap
@@ -237,22 +239,16 @@ export class Sim extends Emitter {
     return true;
   }
 
-  /** Dry off with a towel (a few seconds), then carry on with then(). */
-  towelOff(res, then = null) {
-    if (res.dryingOff) return;
+  /**
+   * Wet in swimwear / underwear: they can't put clothes on until they've dried
+   * (they wait at home; stripping to underwear is still fine). The change
+   * happens by itself once they're dry (see perMinute).
+   */
+  waitToDry(res, index, opts) {
+    const first = !res.pendingChange;
+    res.pendingChange = { index, ...opts };
     res.dryingOff = true;
-    const done = () => {
-      res.dryingOff = false;
-      res.d.wetness = 0;
-      res.d.soakedMinutes = 0;
-      res.d.swimWet = false;
-      res.avatar?.setWetness(0);
-      then?.();
-    };
-    res.say(pick(['Gotta dry off first!', '*towels off*', 'Can\'t get dressed dripping wet!']), { emoji: '🧺', sound: false });
-    res.plan.unshift({ kind: 'anim', anim: 'dress', dur: 4, emoji: '🧺', then: done });
-    // if something interrupts them, they can try again later
-    setTimeout(() => { if (res.dryingOff && !res.plan.length && !res.step) res.dryingOff = false; }, 15000);
+    if (first) res.say(pick(['Still dripping... I\'ll get dressed once I\'m dry.', 'Can\'t put clothes on wet. Drying off first!', '*waits to dry off*']), { emoji: '💧', sound: false });
   }
 
   /** Would the resident wear something else for this? (outfit index or null) */
@@ -553,6 +549,45 @@ export class Sim extends Emitter {
     return `${res.name} loved the gift!`;
   }
 
+  /** Places a resident can be teleported to: [key, label]. */
+  teleportTargets(res) {
+    const out = [[res.homeKey, '🏠 Their apartment'], ['plaza', '⛲ Plaza'], ['beach', '🏖️ Beach'], ['park', '🌳 Park'], ['stage', '🎤 Stage'], ['pier', '🎣 Pier'],
+      ['cafe', '☕ Café (inside)'], ['shop', '👕 Shop (inside)'], ['clinic', '🏥 Clinic (inside)'], ['condo', '🏢 Condo lobby'], ['condoPool', '🏊 Condo pool']];
+    for (const [k, l] of Object.entries(this.locations)) if (l.venue && !l.locked) out.push([k, `📍 ${l.label}`]);
+    return out.filter(([k]) => k && (this.locations[k] || this.rooms?.kindOf(k)));
+  }
+
+  /**
+   * Teleport: instantly put a (stuck) resident somewhere, dropping whatever
+   * they were doing. Rooms (café, apartments, condo…) put them inside.
+   */
+  teleport(res, key) {
+    this.social.cancelFor(res);
+    const f = this.fights.fightOf(res);
+    if (f) f.end(-1, 'player');
+    res.engaged = null;
+    res.leaveSeat();
+    res.clearPlan();
+    Object.assign(res, { suspended: null, route: null, leaving: false, errand: null, nightOut: null, onExit: null, pendingChange: null, dryingOff: false });
+    if (res.inside) res.exit();
+    const room = this.rooms?.kindOf(key) ? this.rooms.get(key) : null;
+    if (room) {
+      res._enterRoom(key, 60);
+    } else {
+      const l = this.locations[key];
+      if (!l) return false;
+      const p = { x: l.x + rand(-1.5, 1.5), z: l.z + rand(-1.5, 1.5) };
+      res.placeAt(p.x, p.z);
+      res.pushOutOfObstacles?.(p.x, p.z);
+    }
+    res.thinkTimer = 0.5;
+    res.say('Whoa! How did I get here?!', { emoji: '✨', sound: false });
+    this.effects?.burst?.(new THREE.Vector3(res.x, res.group.position.y + 1, res.z), '#c9f0ff', 12, 0.3);
+    if (this.selected === res) this.focusOn(res);
+    this.emit('resident', res);
+    return true;
+  }
+
   /** Send a resident somewhere (e.g. clinic) and keep them inside for a while. */
   sendTo(res, loc, minutes, onExit) {
     const door = this.locationDoor(loc, res);
@@ -740,6 +775,14 @@ export class Sim extends Emitter {
   }
 
   perMinute(min) {
+    if (this._romanceCleanup) {
+      // romance is between men and women only
+      this._romanceCleanup = false;
+      for (const a of this.residents) for (const [id, r] of Object.entries(a.d.relationships)) {
+        const b = this.byId(id);
+        if (b && !canRomance(a, b)) { r.crush = false; r.partner = false; }
+      }
+    }
     const w = this.weather;
     for (const r of this.residents) {
       const d = r.d;
@@ -825,6 +868,17 @@ export class Sim extends Emitter {
     updatePriorRelations(this, min);
     updateCelebrities(this, min);
     updateMishaps(this, min);
+    // dried off: now they can get dressed
+    for (const r of this.residents) {
+      const pc = r.pendingChange;
+      if (!pc) continue;
+      if (r.d.wearing === pc.index) { r.pendingChange = null; r.dryingOff = false; continue; }
+      if (!mustDryFirst(r, pc.index) && !r.engaged && !r.changing) {
+        r.pendingChange = null;
+        r.dryingOff = false;
+        if (!r.inside || r.inside === r.homeKey) this.changeOutfit(r, pc.index, { quiet: pc.quiet, purpose: pc.purpose });
+      }
+    }
     this.night.update(min);
     for (const r of this.residents) {
       if (!r.inside && !r.engaged && !r.inWater && !r.d.mishap && chance(0.00008 * min)) causeMishap(this, r, chance(0.6) ? 'seam' : 'stain');
@@ -899,6 +953,7 @@ export class Sim extends Emitter {
     this.progress.restore(data.progress);
     this.economy.restore(data.economy);
     this.night.restore(data.night);
+    this._romanceCleanup = true;
     this.syncVenues();
     this.inventory = data.inventory || {};
     this.newsLog = data.news || [];

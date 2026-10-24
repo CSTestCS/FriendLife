@@ -4,7 +4,7 @@
 // can escalate into fist fights (fight.js).
 
 import { outfitSocialBias, underwearChatBeats } from './outfits.js';
-import { priorSocialBias, isRelative } from './relations.js';
+import { priorSocialBias, isRelative, canRomance } from './relations.js';
 import { jobOf, isOnShift, onDuty } from './jobs.js';
 import { residentPerks } from './progress.js';
 import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
@@ -251,8 +251,7 @@ function buildScript(it) {
             if (prevB) sim.social.breakUp(b, sim.byId(prevB), false);
             const prevA = a.partnerId();
             if (prevA) sim.social.breakUp(a, sim.byId(prevA), false);
-            ra.partner = rb.partner = true;
-            ra.crush = rb.crush = true;
+            if (canRomance(a, b)) { ra.partner = rb.partner = true; ra.crush = rb.crush = true; }
             a.changeRel(b.id, 15); b.changeRel(a.id, 15);
             a.setEmotion('love', 240); b.setEmotion('love', 240);
             news(`${a.name} confessed to ${b.name}... and ${b.name} said YES! 💞`, '💞');
@@ -497,7 +496,7 @@ export class Social {
       ['compliment', (t.kindness * 1.6 + (ra.crush ? 1.5 : 0)) * ob.compliment],
       ['gossip', 0.5 + (1 - t.kindness) * 0.8],
       ['hug', r > 50 ? 1.5 + t.kindness : 0],
-      ['date', ra.partner ? 4 : 0],
+      ['date', ra.partner && canRomance(a, b) ? 4 : 0],
       ['prank', (t.quirk * 1.2 + t.temper * 0.3) * (cm > 0 ? 1 : 0.3) * ob.prank],
       ['danceOff', t.energy * 0.8 + (r < 0 ? 0.6 : 0)],
       ['argue', cm * (0.25 + t.temper * 1.6 + (r < 0 ? -r / 25 : 0) + irritable * 1.5 + ra.grudge / 30) * ob.argue],
@@ -505,7 +504,7 @@ export class Social {
       ['apology', (r < -10 || ra.grudge > 25) ? t.kindness * 2.5 : 0],
       ['breakup', ra.partner && r < 15 ? 3 : 0],
       // bold residents with a big crush may confess without asking the player first
-      ['confess', sim.settings.romance && ra.crush && !ra.partner && r > 65 ? t.confidence * 1.2 * ob.confess : 0],
+      ['confess', sim.settings.romance && canRomance(a, b) && ra.crush && !ra.partner && r > 65 ? t.confidence * 1.2 * ob.confess : 0],
     ];
     // their history (family, rivals, exes, spouses…) shapes what they do together
     const pb = priorSocialBias(a, b);
@@ -518,7 +517,7 @@ export class Social {
   maybeCrush(a, b) {
     if (!this.sim.settings.romance) return;
     const r = a.rel(b.id);
-    if (r.crush || r.partner || r.score < 50 || isRelative(a, b)) return;
+    if (r.crush || r.partner || r.score < 50 || !canRomance(a, b)) return;
     if (chance(0.1 + (r.score - 50) / 250)) {
       r.crush = true;
       a.addMemory(`Developed a crush on ${b.name}`);

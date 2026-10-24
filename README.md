@@ -67,7 +67,7 @@ Look inside by **clicking a building**, the **🏠 Rooms** button (`H`), a resid
 
 ### The condo
 
-Everyone lives in the **🏢 condo tower** at the back of the island: each resident gets an apartment (four per floor, as many floors as needed). Residents really walk through it: in the front door to the **lobby** (sofa, mailboxes), up the lift to **their floor's hallway**, and in through their own door (with their name on it) — and back out the same way, whatever sends them out (an errand, the clinic, a friend to visit). Neighbours bump into each other in the hallways and stop for a chat, hang out there, and visit each other's apartments. The condo also has an **indoor pool** that anyone can use — it's especially popular when it rains — with its own **Pool Lifeguard** job. Click the condo or use **🏠 Rooms** to look into the lobby, the pool, each floor and each apartment.
+Everyone lives in the **🏢 condo tower** at the back of the island: each resident gets an apartment (four per floor, as many floors as needed). Residents really walk through it: in the front door to the **lobby** (sofa, mailboxes), up the lift to **their floor's hallway**, and in through their own door (with their name on it) — and back out the same way, whatever sends them out (an errand, the clinic, a friend to visit). Neighbours bump into each other in the hallways and stop for a chat, hang out there, and visit each other's apartments — straight through the hallway (or the lift for another floor), without leaving the building. The condo also has an **indoor pool** that anyone can use — it's especially popular when it rains — with its own **Pool Lifeguard** job. Click the condo or use **🏠 Rooms** to look into the lobby, the pool, each floor and each apartment.
 
 ### Venues & things to do
 
@@ -82,6 +82,12 @@ Money matters now. **Income:** residents' **wages** (get them jobs and promotion
 Now and then, after bedtime, someone **sneaks out** for something a little naughty: a **midnight dip** or an **underwear dare run** round the fountain (stripped down to their "Underwear" outfit), an **after-hours soak** in the hot spring, a **snack raid** on the closed café, **moonlight dancing** on the stage, a **secret campfire** or **stargazing** in their sleepwear. They usually wake a **close friend** to come along. The noise can wake a neighbour: a **close friend tags along** instead of telling, anyone else **scolds** them and sends them home red-faced, and an officer on duty hands out a **curfew fine**. Get away with it and it's in the news the next morning. Turn it off in **⚙️ Settings → Night mischief**.
 
 Otherwise nights are quiet: residents who are home at bedtime stay in, do their bedtime routine and sleep in their sleepwear. If someone does get caught out in their sleepwear at night, they go back to bed rather than getting dressed for the day. Too dark? **⚙️ Settings → Night brightness**.
+
+### Handy tools
+
+- **📍 Teleport…** (resident panel): someone stuck? Instantly send them to their apartment, a building or any spot on the island.
+- **📤 Export** (resident panel) saves a resident to a `.friendlife-character.json` file — look, closet, personality, voice and words, with the models, textures and variants they use built in. **📥 Import Character** (under the resident list) brings them onto any island.
+- Romance (crushes, dating, confessions) only happens between men and women. Residents step aside to pass each other instead of bumping into each other.
 
 ### Swimming & lifeguards
 
@@ -107,7 +113,7 @@ There's always a small chance of a **wardrobe mishap**: clothes **torn in a figh
 - An outfit **named "Underwear"** can be changed into anywhere — everything else still needs the wardrobe at home.
 - Wearing "Underwear", any outfit with **"Incomplete"** in its name, or having a mishap means **underwear shows**. Out in public (anywhere but their own home) and not swimming, others notice ("Uh, I can see your underwear!"). A man seeing a woman in her underwear — or a woman seeing a man — gets flustered and attracted (and may develop a crush); relatives don't.
 - Residents **remember why they changed** for as long as the outfit stays on: someone walking back from a swim in their underwear/swimwear knows why ("It's swimwear, silly!") and isn't shocked when it's pointed out.
-- **Wet in swimwear or underwear?** They towel off at the wardrobe before putting anything else on. Stripping down to underwear works wet or dry.
+- **Wet in swimwear or underwear?** They have to wait at home until they've dried off before putting clothes on again (it happens by itself once they're dry). Stripping down to underwear works wet or dry.
 - **Heading out the door** still in underwear (e.g. their "home" outfit) with no reason for it, residents usually notice and go back to the wardrobe first. How often they *don't* notice — and how often someone forgets to get dressed in the morning — is set with **⚙️ Settings → 🩲 Leave home in underwear** (default 5%, 0% = never).
 - Anyone seen in an outfit they feel **embarrassed** in (or with underwear showing, unless they're proud of the look) covers up and goes home to put on something else. Swimming is the exception.
 
@@ -195,7 +201,7 @@ The **👕 Wardrobe** lists every part of a resident's model and outfit — one 
 
 ### Textures (.png / .jpg / .webp)
 
-A texture with **"metallic"** or **"silk"** in its name is always shiny (silk softly, metallic strongly) and keeps that same shine when the resident is wet. Used by the Wardrobe (above) and for re-skinning the island's **ground** and **paths** (Build → 🖼️ Surfaces, or the Library's texture tab).
+A texture (imported, or one built into the model) with **"metallic"** or **"silk"** in its name is always shiny (silk softly, metallic strongly) and keeps that same shine when the resident is wet. Used by the Wardrobe (above) and for re-skinning the island's **ground** and **paths** (Build → 🖼️ Surfaces, or the Library's texture tab).
 
 ### Animations (.vrma / .json)
 

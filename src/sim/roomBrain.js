@@ -176,6 +176,17 @@ export function thinkIndoors(res, sim, room) {
         if (go(room.freeSpot('bed'), nap, { expr: { relaxed: 1 }, then: () => { n.energy = clamp(n.energy + nap / 4, 0, 100); } })) return;
         if (go(room.freeSpot('sofa'), rand(40, 80), { anim: 'sleep', expr: { relaxed: 1 } })) return;
       }
+      // pop over to a friend's apartment in the building (hallway / lift, no need to go outside)
+      if (isHome && !res.sleeping && hour >= 9 && hour < 21.5 && chance(0.08 + res.t.sociability * 0.1)) {
+        const friends = sim.residents.filter((o) => o !== res && o.inside === o.homeKey && !o.sleeping && !o.engaged && res.relScore(o.id) > 20);
+        if (friends.length) {
+          const f = friends[Math.floor(Math.random() * friends.length)];
+          res.say(`I'll drop by ${f.name}'s place!`, { emoji: '🚪', sound: false });
+          res.enter(f.homeKey, 40 + Math.random() * 50);
+          res.onExit = null;
+          return;
+        }
+      }
       const choice = weightedPick([
         ['sofa', 3], ['table', n.hunger < 60 ? 4 : 0.5], ['kitchen', n.hunger < 50 ? 3 : 0.7], ['books', 1 + res.t.quirk],
         ['closet', res.d.outfits?.length ? 1 : 0.3], ['floor', 0.8], ['stand', 0.6],
