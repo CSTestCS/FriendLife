@@ -605,24 +605,44 @@ export class Sim extends Emitter {
   /** Have resident a go to b and start an interaction (retries if b is busy). */
   goInteract(a, b, kind, opts = {}) {
     opts = { force: true, ...opts };
-    if (!a || !b) return;
-    // out through the building first (unless they're in the same room)
-    if (a.inside && a.inside !== b.inside && !a.headOut(() => this.goInteract(a, b, kind, opts))) return;
+    if (!a || !b || a === b) return;
     a.clearPlan();
-    const attempt = (tries) => {
-      if (!this.residents.includes(a) || !this.residents.includes(b)) return;
-      if (a.engaged) { if (tries > 0) setTimeout(() => attempt(tries - 1), 4000); return; }
-      if (b.available) {
-        this.social.start(a, b, kind, opts);
-      } else if (tries > 0) {
-        if (b.inside) {
-          const door = this.locationDoor(b.inside, b);
-          if (door) a.setPlan([{ kind: 'walk', x: door[0] + rand(-1, 1), z: door[1] + rand(0.5, 1.5) }, { kind: 'wait', dur: 6 }]);
+    a.suspended = null;
+    // checked every game minute (see update) until they meet, or give up after a while
+    this.seeking ||= [];
+    this.seeking = this.seeking.filter((j) => j.a !== a);
+    const job = { a, b, kind, opts, deadline: this.clock + 150, headingTo: undefined, next: 0 };
+    this.seeking.push(job);
+    this._seek(job);
+  }
+
+  /** One check of a "go and find them" job. Returns true when finished. */
+  _seek(job) {
+    const { a, b, kind, opts } = job;
+    if (!this.residents.includes(a) || !this.residents.includes(b)) return true;
+    if (a.engaged || a.ko) return this.clock > job.deadline;
+    const here = a.inside || null;
+    const there = b.inside || null;
+    // in the same place (both outside, or the same room): go up to them and start
+    if (here === there && !b.engaged && !b.ko && (!there || a.room)) {
+      if (this.social.start(a, b, kind, { ...opts, indoor: !!there })) return true;
+    }
+    if (this.clock > job.deadline) { a.say(pick([`Guess ${b.name} is busy...`, 'Oh well, maybe later.']), { emoji: '🤷', sound: false }); return true; }
+    // follow them: into their building / room (through the condo lobby and hallways), or back outside
+    if (here !== there && job.headingTo !== there) {
+      job.headingTo = there;
+      if (there) {
+        if (chance(0.5)) a.say(`Going to find ${b.name}!`, { emoji: '🚶', sound: false });
+        if (a.inside) a.enter(there, 60);
+        else {
+          const door = this.locationDoor(there, a);
+          if (door) a.setPlan([{ kind: 'walk', x: door[0], z: door[1] }, { kind: 'enter', loc: there, minutes: 60 }]);
         }
-        setTimeout(() => attempt(tries - 1), 5000);
-      }
-    };
-    attempt(12);
+      } else a.headOut();
+    } else if (here === there && !there && !a.moving && !a.plan.length && this.dist(a, b) > 3) {
+      a.setPlan([{ kind: 'walk', x: b.x, z: b.z, stopDist: 1.4 }]);
+    }
+    return false;
   }
 
   locationDoor(loc, res) {
@@ -753,6 +773,11 @@ export class Sim extends Emitter {
           else if (r.room) thinkIndoors(r, this, r.room);
         }
       }
+    }
+    // residents on their way to find someone (into buildings, up to apartments…)
+    if (this.seeking?.length) {
+      for (const job of this.seeking) if (this.clock >= job.next) { job.next = this.clock + 1; job.done = this._seek(job); }
+      this.seeking = this.seeking.filter((j) => !j.done);
     }
     this.social.update(dt);
     this.fights.update(dt);

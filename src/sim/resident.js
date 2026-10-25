@@ -500,6 +500,14 @@ export class Resident {
       if (!rest.length) this.insideUntil = this.sim.clock + minutes;
       return;
     }
+    // already inside somewhere else: walk out (through any building) and over there
+    if (this.inside && this.inside !== locKey) {
+      this.headOut(() => {
+        const door = this.sim.locationDoor(locKey, this);
+        if (door) this.setPlan([{ kind: 'walk', x: door[0], z: door[1] }, { kind: 'enter', loc: locKey, minutes }]);
+      });
+      return;
+    }
     this.route = null;
     this.leaving = false;
     this._enterRoom(locKey, minutes);
