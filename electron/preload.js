@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld('friendlife', {
   readMod: (p) => ipcRenderer.invoke('mods:read', p),
   readSample: (name) => ipcRenderer.invoke('samples:read', name),
   openModsFolder: (sub) => ipcRenderer.invoke('mods:open', sub || ''),
+  ttsRender: (jobs) => ipcRenderer.invoke('tts:render', jobs),
+  ttsVoices: () => ipcRenderer.invoke('tts:voices'),
 });

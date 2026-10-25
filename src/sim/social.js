@@ -9,8 +9,9 @@ import { jobOf, isOnShift, onDuty } from './jobs.js';
 import { residentPerks } from './progress.js';
 import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, TOPICS } from './data.js';
+import { EXTRA_FRIENDLY, extraWeights, buildExtra } from './social2.js';
 
-const FRIENDLY_KINDS = new Set(['chat', 'joke', 'compliment', 'gossip', 'hug', 'date', 'confess', 'apology', 'danceOff']);
+const FRIENDLY_KINDS = new Set(['chat', 'joke', 'compliment', 'gossip', 'hug', 'date', 'confess', 'apology', 'danceOff', ...EXTRA_FRIENDLY]);
 const CONFLICT_MUL = { off: 0, mild: 0.6, normal: 1, spicy: 1.8 };
 
 export class Interaction {
@@ -406,8 +407,11 @@ function buildScript(it) {
       S.push({ dur: 0.1, fn: () => sim.social.breakUp(a, b, true) });
       break;
     }
-    default:
-      S.push({ dur: 2, a: TALK(D('greet')), b: LISTEN() });
+    default: {
+      const extra = buildExtra(kind, { a, b, sim });
+      if (extra) S.push(...extra);
+      else S.push({ dur: 2, a: TALK(D('greet')), b: LISTEN() });
+    }
   }
   return S;
 }
@@ -506,6 +510,8 @@ export class Social {
       // bold residents with a big crush may confess without asking the player first
       ['confess', sim.settings.romance && canRomance(a, b) && ra.crush && !ra.partner && r > 65 ? t.confidence * 1.2 * ob.confess : 0],
     ];
+    // lots of other little things to do together
+    for (const e of extraWeights(a, b, r, sim)) w.push(e);
     // their history (family, rivals, exes, spouses…) shapes what they do together
     const pb = priorSocialBias(a, b);
     for (const e of w) e[1] *= pb[e[0]] ?? 1;

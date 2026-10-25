@@ -50,7 +50,7 @@ const check = (name, ok, extra = '') => { results.push(ok); console.log(`${ok ? 
     a.d.wetness = 1;
     await s.changeOutfit(a, 1, { quiet: true });
     const waiting = { wearing: a.d.wearing, wet: a.d.wetness, pending: !!a.pendingChange };
-    a.d.wetness = 0.1; s.perMinute(0.1);
+    a.d.wetness = 0.01; s.perMinute(0.1);
     await new Promise((q) => setTimeout(q, 1500));
     out.dry = { waiting, after: a.d.wearing };
     // visiting inside the condo never leaves the building
@@ -104,7 +104,7 @@ const check = (name, ok, extra = '') => { results.push(ok); console.log(`${ok ? 
     window.__dl = (n, t) => { saved = t; };
     return out;
   });
-  check('built-in "silk" texture shines (rim mask lifted, outline untouched)', sh.shine === 'silk' && sh.matcap >= 0.5 && !sh.mask && sh.outline.every((v) => v < 0.5), JSON.stringify(sh));
+  check('built-in "silk" texture shines (outline untouched)', sh.shine === 'silk' && sh.matcap >= 0.5 && sh.outline.every((v) => v < 0.5), JSON.stringify(sh));
 
   const io = await ev(async () => {
     const s = window.__friendlife.sim;

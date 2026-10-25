@@ -201,7 +201,7 @@ The **👕 Wardrobe** lists every part of a resident's model and outfit — one 
 
 ### Textures (.png / .jpg / .webp)
 
-A texture (imported, or one built into the model) with **"metallic"** or **"silk"** in its name is always shiny (silk softly, metallic strongly) and keeps that same shine when the resident is wet. Used by the Wardrobe (above) and for re-skinning the island's **ground** and **paths** (Build → 🖼️ Surfaces, or the Library's texture tab).
+A texture (imported, or one built into the model) with **"metallic"** or **"silk"** in its name always has the wet look (metallic exactly like fully wet, silk a little softer), wet or dry. Used by the Wardrobe (above) and for re-skinning the island's **ground** and **paths** (Build → 🖼️ Surfaces, or the Library's texture tab).
 
 ### Animations (.vrma / .json)
 

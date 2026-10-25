@@ -201,7 +201,8 @@ export class Sim extends Emitter {
     }
     // what they're dressing for (remembered while the outfit stays on)
     const purpose = index != null ? null : ctx.activity || (!ctx.outside && res.inside === res.homeKey ? 'home' : null);
-    if (want === res.d.wearing) { if (purpose) setOutfitPurpose(res, want, purpose); return null; }
+    // (keep a reason they already have for it, e.g. swimwear from a swim)
+    if (want === res.d.wearing) { if (purpose && !outfitPurpose(res, { anywhere: true })) setOutfitPurpose(res, want, purpose); return null; }
     if (res.changing) { res.redress = { index: want, quiet, purpose }; return null; }
     res.changing = true;
     return this.changeOutfit(res, want, { quiet, purpose }).finally(() => {
@@ -397,9 +398,8 @@ export class Sim extends Emitter {
   speak(res, text) {
     const mode = this.settings.voice;
     if (mode === 'off' || !this.isNear(res) || this.speed > 4) return;
-    const now = this.realTime;
-    if ((res.lastVoice || 0) > now - 0.4 / Math.max(1, this.speed)) return;
-    res.lastVoice = now;
+    // (every line is voiced: a newer line from the same speaker replaces the old one,
+    // so what you hear always matches the speech bubble)
     const tts = mode === 'speech' && (this.settings.voiceScope === 'near' || this.selected === res);
     const vol = this.selected === res ? 1 : 0.55;
     this.voice?.speak(text, res.d.voice || {}, { mode: tts ? 'speech' : 'babble', volume: vol, mood: res.mood(), key: res.id });
@@ -794,8 +794,8 @@ export class Sim extends Emitter {
       n.social = clamp(n.social - min * 0.05 * (0.5 + r.t.sociability), 0, 100);
 
       // wetness: rain soaks you unless indoors or carrying an umbrella
-      if (r.inWater) d.wetness = 1;
-      if (d.swimWet && d.wetness < 0.2) d.swimWet = false;
+      if (r.inWater) { d.wetness = 1; d.swimWet = true; d.lastSwamAt = this.clock; }
+      if (d.swimWet && d.wetness < 0.04) d.swimWet = false;
       const exposed = !r.inside && (w.raining || w.snowing);
       if (exposed) {
         const rate = (w.p.rain * 0.06 + w.p.snow * 0.015) * (d.hasUmbrella && !r.engaged?.isFight && !r.ko ? 0.12 : 1);

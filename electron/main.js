@@ -4,6 +4,7 @@
 const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const sapi = require('./sapi');
 
 const MOD_TYPES = { characters: 'character', outfits: 'outfit', textures: 'texture', animations: 'animation' };
 const EXTS = { character: ['.vrm'], outfit: ['.vrm'], texture: ['.png', '.jpg', '.jpeg', '.webp'], animation: ['.vrma', '.fbx', '.json'] };
@@ -112,6 +113,9 @@ app.whenReady().then(() => {
     if (!fs.readdirSync(dir).includes(name)) throw new Error('Unknown sample');
     return fs.readFileSync(path.join(dir, name));
   });
+  // system voices rendered to audio (the game shapes pitch / intonation / emotion itself)
+  ipcMain.handle('tts:render', (_e, jobs) => sapi.render(Array.isArray(jobs) ? jobs.slice(0, 40) : []));
+  ipcMain.handle('tts:voices', () => sapi.listVoices());
   ipcMain.handle('mods:open', (_e, sub) => {
     const root = ensureModFolders();
     const folder = Object.keys(MOD_TYPES).includes(sub) ? path.join(root, sub) : root;
@@ -121,4 +125,4 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { sapi.stop(); if (process.platform !== 'darwin') app.quit(); });

@@ -288,27 +288,9 @@ function getShineMatcap(kind) {
   return t;
 }
 
-/** Steady shine on a prepared MToon material (silk is softer than metallic). */
+/** Steady shine: exactly the "fully wet" look (silk a bit softer), whatever the weather. */
 export function applyMToonShine(mat, kind, tint) {
-  const b = mat.userData.wetBase;
-  if (!b) return;
-  // VRoid's rim mask texture would hide the matcap everywhere but the edges
-  if (mat.rimMultiplyTexture && !mat.userData.rimMaskWas) {
-    mat.userData.rimMaskWas = mat.rimMultiplyTexture;
-    mat.rimMultiplyTexture = null;
-    mat.needsUpdate = true;
-  }
-  mat.userData.rimMixWas ??= mat.rimLightingMixFactor;
-  mat.rimLightingMixFactor = 0.35; // shine stays visible in shade too
-  mat.color.copy(b.color);
-  mat.shadeColorFactor.copy(b.shade);
-  if (tint) { mat.color.multiply(tint); mat.shadeColorFactor.multiply(tint); }
-  const tex = getShineMatcap(kind);
-  if (mat.matcapTexture !== tex) mat.matcapTexture = tex;
-  mat.matcapFactor.setScalar(kind === 'metallic' ? 1.0 : 0.5);
-  mat.parametricRimColorFactor.copy(b.rim);
-  mat.parametricRimFresnelPowerFactor = b.rimPower;
-  mat.parametricRimLiftFactor = b.rimLift;
+  applyMToonWet(mat, kind === 'metallic' ? 1 : 0.6, tint);
 }
 
 /** Undo applyMToonShine's mask / mix changes (texture renamed, look reset). */

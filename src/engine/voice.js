@@ -3,8 +3,10 @@
 //    worker, then played through WebAudio so pitch can go far beyond what
 //    system voices allow (about two octaves up or down), with the
 //    intonation/emotion shape applied word by word.
-//  * "speech" with a system voice: the OS text-to-speech engine (pitch is
-//    limited to its 0–2 range); the shape is applied phrase by phrase.
+//  * "speech" with a system voice: in the desktop app the Windows voice is
+//    rendered to audio (electron/sapi.js) and played through the same
+//    pitch / intonation / emotion shaping as the built-in voice. In a plain
+//    browser it falls back to speechSynthesis (pitch 0–2, phrase by phrase).
 //  * "babble": synthesized gibberish (Animal Crossing style) with its own
 //    tone, waveform, vowel colour (formant), speed, pitch range, vibrato and
 //    breathiness, following the same shape.
@@ -184,6 +186,9 @@ export class VoiceEngine {
 
   get ttsAvailable() { return !!this.synth; }
 
+  /** Desktop (Electron on Windows): system voices can be rendered to audio. */
+  get desktopTTS() { return typeof window !== 'undefined' && !!window.friendlife?.ttsRender; }
+
   voiceList() {
     if (this.synth && !this.voices.length) this.voices = this.synth.getVoices() || [];
     return this.voices.map((v) => ({ name: v.name, lang: v.lang }));
@@ -204,6 +209,14 @@ export class VoiceEngine {
     const plan = planProsody(clean, v, mood || 'neutral');
     if (mode === 'speech') {
       const useSystem = v.engine === 'system' && this.synth;
+      // desktop app: render the system voice to audio and shape it ourselves
+      // (pitch / intonation / emotion work just like the built-in voice)
+      if (useSystem && this.desktopTTS && this.audio?.ctx) {
+        return this.speakBuiltin(plan, v, { volume, force, key: force ? '__test' : key, system: true }).catch((err) => {
+          console.warn('system voice rendering failed, speaking directly:', err?.message || err);
+          this.speakSystem(plan, v, { volume, force: true });
+        });
+      }
       if (!useSystem && this.audio?.ctx && this.builtin.supported) {
         return this.speakBuiltin(plan, v, { volume, force, key: force ? '__test' : key }).catch((err) => {
           console.warn('built-in speech failed, using fallback:', err);
@@ -237,10 +250,9 @@ export class VoiceEngine {
 
   /** System text-to-speech: one utterance per phrase with that phrase's pitch/speed. */
   speakSystem(plan, v, { volume = 1, force = false } = {}) {
-    if (this.synth.speaking || this.synth.pending) {
-      if (!force) return;
-      this.synth.cancel();
-    }
+    // the newest line replaces whatever is still being said (keeps voice and speech bubble in step)
+    if (this.synth.speaking || this.synth.pending) this.synth.cancel();
+    void force;
     const sysVoice = this.voices.find((x) => x.name === v.voiceName) || this.pickDefault();
     for (const c of plan.chunks) {
       const u = new SpeechSynthesisUtterance(c.text);
@@ -253,13 +265,13 @@ export class VoiceEngine {
   }
 
   /** Built-in synth: render each phrase, then glide pitch word by word while it plays. */
-  async speakBuiltin(plan, v, { volume = 1, force = false, key = null } = {}) {
+  async speakBuiltin(plan, v, { volume = 1, force = false, key = null, system = false } = {}) {
     const a = this.audio;
     const ctx = a.ctx;
     const token = {};
     if (force) this.stop();
     if (key) this.claims.set(key, token);
-    if (!force && this.playing.size >= 4 && !(key && this.playing.has(key))) return;
+    if (!force && this.playing.size >= 6 && !(key && this.playing.has(key))) return;
 
     const P = clamp(v.pitch ?? 1, PITCH_MIN, PITCH_MAX) * plan.pitch;
     const speechRate = clamp(v.rate ?? 1, 0.3, 3) * plan.rate;
@@ -273,7 +285,21 @@ export class VoiceEngine {
       const text = c.final || /[,;:.!?…~]$/.test(c.text) ? c.text : `${c.text},`;
       return { text, pitch: esPitchParam(es), speed: (175 * c.speedMul) / play, variant: v.synthVoice || 'm3', accent: v.accent || 'en-us' };
     });
-    const results = await this.builtin.render(jobs);
+    let results;
+    if (system) {
+      // the system voice speaks each phrase at a compensating speed; all of the pitch
+      // (and the word-by-word intonation / emotion glide) is done by playback below
+      const sysVoice = this.voices.find((x) => x.name === v.voiceName) || this.pickDefault();
+      const sysJobs = plan.chunks.map((c) => {
+        const want = P * c.p;
+        c.play = want;
+        c.speedMul = speechRate * c.r;
+        return { text: c.text, voice: sysVoice?.name || v.voiceName || '', rate: (10 * Math.log(clamp(c.speedMul / want, 0.34, 2.9))) / Math.log(3) };
+      });
+      const wavs = await window.friendlife.ttsRender(sysJobs);
+      if (!wavs || wavs.every((w) => !w)) throw new Error('system voice not available for rendering');
+      results = wavs.map((w) => (w ? parseWav(w) : null));
+    } else results = await this.builtin.render(jobs);
     if (key && this.claims.get(key) !== token) return; // a newer line from this speaker took over
     if (key) this._stopKey(key);
 
@@ -414,4 +440,28 @@ export class VoiceEngine {
       t += step * (0.9 + Math.random() * 0.3);
     }
   }
+}
+
+/** WAV bytes (from the system voice) → {samples: Int16Array (mono), sampleRate}. */
+function parseWav(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let ch = 1, rate = 22050, bits = 16, off = 12, data = null;
+  while (off + 8 <= u8.length) {
+    const id = String.fromCharCode(u8[off], u8[off + 1], u8[off + 2], u8[off + 3]);
+    const size = dv.getUint32(off + 4, true);
+    if (id === 'fmt ') { ch = dv.getUint16(off + 10, true); rate = dv.getUint32(off + 12, true); bits = dv.getUint16(off + 22, true); }
+    if (id === 'data') { data = [off + 8, Math.min(size, u8.length - off - 8)]; break; }
+    off += 8 + size + (size & 1);
+  }
+  if (!data) return { samples: new Int16Array(0), sampleRate: rate };
+  const [start, len] = data;
+  const step = (bits / 8) * ch;
+  const n = Math.floor(len / step);
+  const out = new Int16Array(n);
+  for (let i = 0; i < n; i++) {
+    const p = start + i * step;
+    out[i] = bits === 8 ? (u8[p] - 128) << 8 : dv.getInt16(p, true);
+  }
+  return { samples: out, sampleRate: rate };
 }

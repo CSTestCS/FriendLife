@@ -115,8 +115,9 @@ export function isSwimwear(res, idx = res.d.wearing ?? -1) {
  * anything else (stripping down to underwear is always fine).
  */
 export function mustDryFirst(res, target) {
-  if ((res.d.wetness || 0) < 0.25 || target === res.d.wearing) return false;
-  if (!(isUnderwear(res) || isSwimwear(res) || underwearShowing(res))) return false;
+  // properly dry, not just "mostly": no visible wet sheen left
+  if ((res.d.wetness || 0) < 0.04 || target === res.d.wearing) return false;
+  if (!(isUnderwear(res) || isSwimwear(res) || underwearShowing(res) || res.d.swimWet)) return false;
   return !isUnderwear(res, target);
 }
 
@@ -390,14 +391,18 @@ export function updateExposure(sim, min) {
     if (!inPublic(r)) continue;
     const showing = underwearShowing(r);
     // dressed like this on purpose (swimwear on the way back from the beach…): no shock
-    const embarrassed = embarrassingToWear(r) && (!!r.d.mishap || !outfitPurpose(r));
+    const swimming = underwearIntent(sim, r) === 'swim';
+    const embarrassed = embarrassingToWear(r) && (!!r.d.mishap || (!outfitPurpose(r) && !swimming));
     if (!showing && !embarrassed) continue;
     const near = sim.residents.filter((o) => o !== r && !o.engaged && !o.ko && !o.sleeping && (o.inside || null) === (r.inside || null) && sim.dist(o, r) < 7);
     if (!near.length) continue;
     // someone notices the underwear
-    if (showing && chance(0.05 * min) && sim.clock - (r.seenUndiesAt ?? -999) > 10) {
+    // (each onlooker comments once, then not again for hours; swimwear on the way to / from a swim is barely worth a remark)
+    const fresh = near.filter((o) => sim.clock - (o.saidUndies?.[r.id] ?? -1e9) > 240);
+    if (showing && fresh.length && chance(0.05 * min * (swimming ? 0.25 : 1)) && sim.clock - (r.seenUndiesAt ?? -999) > 10) {
       r.seenUndiesAt = sim.clock;
-      const o = pick(near);
+      const o = pick(fresh);
+      (o.saidUndies ||= {})[r.id] = sim.clock;
       reactToUndies(sim, o, r, near);
     }
     // the wearer reacts: go and get dressed (unless they're proud of it or working)
@@ -569,6 +574,9 @@ export function underwearIntent(sim, res) {
   const m = res.d.mishap;
   if (m) return m.owned ? 'own' : null;
   if (res.nightOut) return 'mischief';
+  // still wet from a swim (or just been swimming): obviously that's why
+  const swimmy = isSwimwear(res) || isUnderwear(res) || underwearShowing(res);
+  if (swimmy && (res.d.swimWet || sim.clock - (res.d.lastSwamAt ?? -1e9) < 120 || res.inside === 'condoPool')) return 'swim';
   // they remember why they put it on (e.g. walking back from a swim)
   const why = outfitPurpose(res);
   if (why) return why;
@@ -605,7 +613,9 @@ export function underwearChatBeats(sim, it) {
     const teller = it[tellerKey];
     const wearer = it[wearerKey];
     if (!underwearShowing(wearer) || sim.clock - (wearer.toldUndiesAt ?? -1e9) < 45) continue;
+    if (sim.clock - (teller.saidUndies?.[wearer.id] ?? -1e9) < 240) continue; // already told them
     wearer.toldUndiesAt = sim.clock;
+    (teller.saidUndies ||= {})[wearer.id] = sim.clock;
     const attracted = sim.settings.romance && !isRelative(teller, wearer) && ((teller.d.gender === 'm' && wearer.d.gender === 'f') || (teller.d.gender === 'f' && wearer.d.gender === 'm'));
     const intent = underwearIntent(sim, wearer);
     const tell = attracted

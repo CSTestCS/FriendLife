@@ -28,12 +28,12 @@ export function openVoiceEditor(app, voice, ctx = {}, onChange) {
         const pitchSlider = () => {
           const fmt = (x) => `×${x.toFixed(2)}`;
           const out = h('b', {}, fmt(+voice.pitch));
-          const warn = h('span', { class: 'hint' }, voice.engine === 'system' && voice.pitch > 2 ? ' system voices stop at ×2' : '');
+          const warn = h('span', { class: 'hint' }, voice.engine === 'system' && voice.pitch > 2 && !window.friendlife?.ttsRender ? ' (browser version: system voices stop at ×2)' : '');
           return h('div', { class: 'trait', title: 'How high or low. Built-in voice: ×0.25 (giant) to ×4 (chipmunk).' }, h('span', { class: 'lo' }, 'Pitch'),
             h('input', { type: 'range', min: Math.log2(PITCH_MIN), max: Math.log2(PITCH_MAX), step: 0.01, value: Math.log2(voice.pitch), oninput: (e) => {
               voice.pitch = +(2 ** +e.target.value).toFixed(2);
               out.textContent = fmt(voice.pitch);
-              warn.textContent = voice.engine === 'system' && voice.pitch > 2 ? ' system voices stop at ×2' : '';
+              warn.textContent = voice.engine === 'system' && voice.pitch > 2 && !window.friendlife?.ttsRender ? ' (browser version: system voices stop at ×2)' : '';
               changed();
             }, onchange: () => speak('speech') }), out, warn);
         };
@@ -58,7 +58,7 @@ export function openVoiceEditor(app, voice, ctx = {}, onChange) {
         left.append(h('h3', {}, '🗣️ Speech'),
           h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Engine'),
             engineBtn('synth', '🎛️ Built-in', 'Built-in synthesizer: extreme pitch (×0.25–×4) and full intonation / emotion'),
-            voices.length ? engineBtn('system', '💻 System voice', 'Your computer\'s text-to-speech voices: more natural, pitch limited to ×2') : null),
+            voices.length ? engineBtn('system', '💻 System voice', 'Your computer\'s text-to-speech voices (Microsoft David, Zira…). In the desktop app their audio gets the same pitch / intonation / emotion shaping as the built-in voice.') : null),
           voice.engine === 'system' && voices.length
             ? h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Voice'), selectEl([['', 'System default'], ...voices.map((v) => [v.name, `${v.name} (${v.lang})`])], voice.voiceName || '', (v) => { voice.voiceName = v; changed(); speak('speech'); }))
             : h('div', { class: 'row' },
