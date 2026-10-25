@@ -3,6 +3,7 @@
 // bystander may help, the player can throw a life ring or shout for help, or
 // the waves eventually wash the poor swimmer ashore (hurt and shaken).
 
+import { outfitMeta } from './outfits.js';
 import * as THREE from 'three';
 import { chance, clamp, pick, rand } from '../core/util.js';
 import { jobOf } from './jobs.js';
@@ -34,8 +35,33 @@ export class SwimManager {
   }
 
   /** Plan a swim in the sea (or in the pool room the resident is in). */
+  /**
+   * Has swimwear (an outfit tagged "swim") but isn't wearing it: they have to
+   * change at their wardrobe before getting in the water.
+   */
+  needsSwimwear(res) {
+    const outs = res.d.outfits || [];
+    const swimIdx = [-1, ...outs.map((_, i) => i)].filter((i) => outfitMeta(res, i)?.tags?.includes('swim'));
+    return swimIdx.length > 0 && !swimIdx.includes(res.d.wearing ?? -1);
+  }
+
   planSwim(res) {
     const sim = this.sim;
+    // into swimwear first (from the wardrobe at home), then back to the water
+    if (this.needsSwimwear(res)) {
+      if (sim.clock - (res.swimDressAt ?? -1e9) > 60) {
+        res.swimDressAt = sim.clock;
+        const atPool = res.room?.kind === 'pool';
+        const back = atPool
+          ? () => { const d = sim.locationDoor('condoPool', res); if (d) res.setPlan([{ kind: 'walk', x: d[0], z: d[1] }, { kind: 'enter', loc: 'condoPool', minutes: 45 }]); }
+          : () => this.planSwim(res);
+        res.say(pick(['Gotta put my swimsuit on first!', 'Swimwear time!', 'Can\'t swim in these clothes!']), { emoji: '👙', sound: false });
+        if (sim.goChange(res, { activity: 'swim', after: back, say: false })) return true;
+      }
+      // couldn't change (or just tried): no swim this time
+      res.activity = null;
+      return false;
+    }
     const space = res.room?.kind === 'pool' ? res.room : sim.island;
     const shore = space.shorePoint(res.room ? res.x : null);
     const spots = [space.swimSpot(), space.swimSpot(), space.swimSpot()];

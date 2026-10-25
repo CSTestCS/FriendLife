@@ -233,10 +233,9 @@ export function thinkIndoors(res, sim, room) {
         const w = weightedPick([['swim', sim.swim.canSwim(res) ? 4 : 0], ['lounge', 2], ['edge', 1.5]]);
         if (w === 'swim') {
           if (!res.activity) res.activity = 'swim';
-          sim.swim.planSwim(res);
-          return;
+          if (sim.swim.planSwim(res) !== false) return; // (may go home for swimwear first)
         }
-        if (go(room.freeSpot(w), rand(10, 25), { expr: { relaxed: 0.8 }, then: () => { n.fun = clamp(n.fun + 6, 0, 100); } })) return;
+        if (go(room.freeSpot(w === 'swim' ? 'lounge' : w), rand(10, 25), { expr: { relaxed: 0.8 }, then: () => { n.fun = clamp(n.fun + 6, 0, 100); } })) return;
       }
       break;
     }
