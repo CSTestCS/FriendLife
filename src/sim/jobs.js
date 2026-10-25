@@ -87,10 +87,10 @@ export const JOBS = {
     perk: 'Residents near the class gain levels faster and have fun learning; they also pick up new words.',
   },
   mail: {
-    label: 'Mail Carrier', icon: '📮', place: 'route', start: 8, end: 12, wage: 5,
+    label: 'Mail Carrier', icon: '📮', place: 'route', start: 8, end: 15, wage: 5,
     titles: ['Paper Kid', 'Mail Carrier', 'Postmaster', 'Island Postmaster General'], anims: ['wave'],
     fit: { energy: 0.6, sociability: 0.5 },
-    perk: 'Delivers letters that bring residents closer.',
+    perk: 'Knocks on every apartment, then walks the island: takes residents\' messages (compliments, invitations, gifts, gossip, love letters, insults…) and delivers them.',
   },
 };
 
@@ -366,27 +366,9 @@ export function planOutdoorWork(res, sim) {
       ]);
       return true;
     }
-    case 'mail': {
-      const houses = island.houses.filter((h) => h.owner && h.owner !== res.id && h.door);
-      // the condo gets one mailbox stop for all its residents
-      const condoFolks = sim.residents.filter((r) => r !== res && sim.condo.unitOf(r.id) != null);
-      if (condoFolks.length) houses.push({ owner: pick(condoFolks).id, door: loc.condo.door });
-      if (!houses.length) return false;
-      const h = pick(houses);
-      res.setPlan([
-        { kind: 'walk', x: h.door[0], z: h.door[1] },
-        { kind: 'call', fn: () => {
-          res.working = true;
-          const to = sim.byId(h.owner);
-          const from = pick(sim.residents.filter((x) => x !== to)) || res;
-          res.say(`📮 Letter for ${to?.name || 'you'}!`, { emoji: '✉️' });
-          if (to && from && from !== to) { to.changeRel(from.id, 3); from.changeRel(to.id, 1); }
-          res.changeRel(h.owner, 1);
-        } },
-        { kind: 'anim', anim: 'wave', dur: 2.5 },
-      ]);
-      return true;
-    }
+    case 'mail':
+      // rounds through the condo, then a patrol of the island (see mail.js)
+      return sim.mail.plan(res);
     default:
       return false;
   }

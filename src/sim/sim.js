@@ -15,6 +15,7 @@ import { updatePriorRelations, canRomance } from './relations.js';
 import { Progress, residentPerks, updateCelebrities } from './progress.js';
 import { Economy, VENUES } from './economy.js';
 import { NightLife } from './night.js';
+import { MailService } from './mail.js';
 import { updateJobs, onDuty, jobOf, isOnShift } from './jobs.js';
 import { preferredOutfit, updateOutfitPerception, selfMoodShift, updateMishaps, causeMishap, updateExposure, isUnderwear, embarrassingToWear, fixMishap, setOutfitPurpose, mustDryFirst, outfitPurpose, outfitMeta } from './outfits.js';
 import { INJURIES, line, NAMES, foodById, FOODS, ITEMS } from './data.js';
@@ -65,6 +66,7 @@ export class Sim extends Emitter {
     this.progress = new Progress(this);
     this.economy = new Economy(this);
     this.night = new NightLife(this);
+    this.mail = new MailService(this);
     this.syncVenues();
     if (this.rooms) this.rooms.condo = this.condo;
     this.dialogue = new Dialogue(this);
@@ -958,6 +960,7 @@ export class Sim extends Emitter {
       progress: this.progress.serialize(),
       economy: this.economy.serialize(),
       night: this.night.serialize(),
+      mail: this.mail.serialize(),
       inventory: this.inventory,
       news: this.newsLog.slice(0, 80),
       settings: this.settings,
@@ -978,6 +981,7 @@ export class Sim extends Emitter {
     this.progress.restore(data.progress);
     this.economy.restore(data.economy);
     this.night.restore(data.night);
+    this.mail.restore(data.mail);
     this._romanceCleanup = true;
     this.syncVenues();
     this.inventory = data.inventory || {};

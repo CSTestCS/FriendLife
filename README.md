@@ -89,6 +89,10 @@ Otherwise nights are quiet: residents who are home at bedtime stay in, do their 
 - **📤 Export** (resident panel) saves a resident to a `.friendlife-character.json` file — look, closet, personality, voice and words, with the models, textures and variants they use built in. **📥 Import Character** (under the resident list) brings them onto any island.
 - Romance (crushes, dating, confessions) only happens between men and women. Residents step aside to pass each other instead of bumping into each other.
 
+### The mail carrier
+
+Every morning the **Mail Carrier 📮** goes through the condo floor by floor and **knocks on each apartment door**. Whoever's home lets them in (empty apartments and sleepers are skipped); then they **walk the island**, going up to everyone they haven't seen yet that day. At each visit they hand over any messages waiting for that person and ask "Any messages to send?" — residents send **compliments, invitations, gifts, thank-yous, jokes, questions, apologies, gossip, love letters… or insults**, and the carrier delivers them the next time they see the recipient (who reacts: a gift cheers them up, an invitation may send them off to find the sender, an insult… doesn't go down well). A message meant for the carrier is just said to them on the spot.
+
 ### Swimming & lifeguards
 
 Residents go **swimming** at the beach (and in the condo pool): they change into their swimwear, stretch, wade in, swim the front crawl, tread water and float on their backs — and come out with the wet sheen. Swimming isn't risk free: cramps, tiredness, a full stomach, injuries, rain and especially storms can leave a swimmer **struggling** (🆘). Then:
@@ -113,7 +117,7 @@ There's always a small chance of a **wardrobe mishap**: clothes **torn in a figh
 - An outfit **named "Underwear"** can be changed into anywhere — everything else still needs the wardrobe at home.
 - Wearing "Underwear", any outfit with **"Incomplete"** in its name, or having a mishap means **underwear shows**. Out in public (anywhere but their own home) and not swimming, others notice ("Uh, I can see your underwear!"). A man seeing a woman in her underwear — or a woman seeing a man — gets flustered and attracted (and may develop a crush); relatives don't.
 - Residents **remember why they changed** for as long as the outfit stays on: someone walking back from a swim in their underwear/swimwear knows why ("It's swimwear, silly!") and isn't shocked when it's pointed out.
-- **Wet in swimwear or underwear?** They have to wait at home until they've dried off before putting clothes on again (it happens by itself once they're dry). Stripping down to underwear works wet or dry.
+- **Wet in swimwear or underwear?** Swimmers change into swimwear (an outfit tagged "swim") before getting in the water — an "Underwear" outfit tagged for swimming can be stripped down to on the spot. They have to wait at home until they've dried off before putting clothes on again (it happens by itself once they're dry). Stripping down to underwear works wet or dry.
 - **Heading out the door** still in underwear (e.g. their "home" outfit) with no reason for it, residents usually notice and go back to the wardrobe first. How often they *don't* notice — and how often someone forgets to get dressed in the morning — is set with **⚙️ Settings → 🩲 Leave home in underwear** (default 5%, 0% = never).
 - Anyone seen in an outfit they feel **embarrassed** in (or with underwear showing, unless they're proud of the look) covers up and goes home to put on something else. Swimming is the exception.
 

@@ -11,7 +11,7 @@ import { chance, clamp, pick, rand, weightedPick } from '../core/util.js';
 import { line, TOPICS } from './data.js';
 import { EXTRA_FRIENDLY, extraWeights, buildExtra } from './social2.js';
 
-const FRIENDLY_KINDS = new Set(['chat', 'joke', 'compliment', 'gossip', 'hug', 'date', 'confess', 'apology', 'danceOff', ...EXTRA_FRIENDLY]);
+const FRIENDLY_KINDS = new Set(['chat', 'joke', 'compliment', 'gossip', 'hug', 'date', 'confess', 'apology', 'danceOff', 'mail', ...EXTRA_FRIENDLY]);
 const CONFLICT_MUL = { off: 0, mild: 0.6, normal: 1, spicy: 1.8 };
 
 export class Interaction {
@@ -408,7 +408,7 @@ function buildScript(it) {
       break;
     }
     default: {
-      const extra = buildExtra(kind, { a, b, sim });
+      const extra = kind === 'mail' ? sim.mail.script(a, b) : buildExtra(kind, { a, b, sim });
       if (extra) S.push(...extra);
       else S.push({ dur: 2, a: TALK(D('greet')), b: LISTEN() });
     }

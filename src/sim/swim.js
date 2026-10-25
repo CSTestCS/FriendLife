@@ -3,7 +3,7 @@
 // bystander may help, the player can throw a life ring or shout for help, or
 // the waves eventually wash the poor swimmer ashore (hurt and shaken).
 
-import { outfitMeta } from './outfits.js';
+import { outfitMeta, isUnderwear } from './outfits.js';
 import * as THREE from 'three';
 import { chance, clamp, pick, rand } from '../core/util.js';
 import { jobOf } from './jobs.js';
@@ -48,6 +48,12 @@ export class SwimManager {
   planSwim(res) {
     const sim = this.sim;
     // into swimwear first (from the wardrobe at home), then back to the water
+    // an "Underwear" outfit tagged for swimming: strip down right here, no wardrobe needed
+    const uw = this.needsSwimwear(res) ? (res.d.outfits || []).findIndex((o, i) => isUnderwear(res, i) && outfitMeta(res, i)?.tags?.includes('swim')) : -1;
+    if (uw >= 0) {
+      res.say(pick(['Underwear will do! 😄', '*strips down for a swim*', 'Who needs a swimsuit?']), { emoji: '🩲', sound: false });
+      sim.changeOutfit(res, uw, { quiet: true, purpose: 'swim' });
+    }
     if (this.needsSwimwear(res)) {
       if (sim.clock - (res.swimDressAt ?? -1e9) > 60) {
         res.swimDressAt = sim.clock;

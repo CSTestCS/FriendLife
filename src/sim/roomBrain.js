@@ -119,6 +119,8 @@ export function thinkIndoors(res, sim, room) {
       res.route = null;
     } else res.leaving = true;
   }
+  // the mail carrier's rounds (knocking on doors through the condo)
+  if (!res.leaving && res.d.job?.id === 'mail' && isOnShift(res, sim) && sim.mail.thinkIndoors(res, room)) return;
   if (res.leaving) {
     if (room.kind === 'hall' && meetNeighbour(res, sim, others)) return;
     const [ex, ez] = room.entry;

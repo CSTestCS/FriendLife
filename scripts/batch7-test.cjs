@@ -54,8 +54,15 @@ const check = (name, ok, extra = '') => { results.push(ok); console.log(`${ok ? 
     await s.changeOutfit(a, 0, { quiet: true, force: true });
     s.swim.planSwim(a);
     out.inSwimwear = a.plan.some((p) => p.kind === 'anim' && /float|tread/.test(p.anim));
+    // an Underwear outfit tagged for swimming: changes right there, no trip home
+    a.clearPlan(); a.errand = null; if (a.inside) a.exit(); a.placeAt(0, 20); a.swimDressAt = null;
+    a.d.outfits = [{ name: 'Swimsuit', tags: ['swim'], perception: { self: [], others: [] } }, { name: 'Underwear', tags: ['swim'], perception: { self: [], others: [] } }];
+    await s.changeOutfit(a, -1, { quiet: true, force: true });
+    s.swim.planSwim(a);
+    out.underwear = { wearing: a.d.wearing, errand: a.errand?.kind || null, swims: a.plan.some((p) => p.kind === 'anim' && /float|tread/.test(p.anim)) };
     return out;
   });
+  check('Underwear tagged for swimming: strips right there and swims', r.underwear.wearing === 1 && !r.underwear.errand && r.underwear.swims, JSON.stringify(r.underwear));
   check('pool: goes to change into swimwear instead of swimming in clothes', r.pool.ret === true && r.pool.errand === 'dress' && !r.pool.swimSteps, JSON.stringify(r.pool));
   check('beach: goes to change into swimwear first', r.beach.ret === true && r.beach.errand === 'dress' && !r.beach.swimSteps, JSON.stringify(r.beach));
   check('in swimwear: swims right away', r.inSwimwear, String(r.inSwimwear));
