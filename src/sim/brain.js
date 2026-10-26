@@ -68,6 +68,9 @@ export function backToBed(res, sim) {
   return true;
 }
 
+const INTENT_LABELS = {"wander": "Going for a wander", "bench": "Sitting on a bench", "beach": "Relaxing at the beach", "swim": "Going swimming", "sea": "Looking out at the sea", "dance": "Dancing on the stage", "exercise": "Exercising", "shop": "Going shopping", "cafeTerrace": "Sitting at the café terrace", "pier": "Hanging out on the pier", "think": "Lost in thought", "snowman": "Building a snowman", "emote": "Busting a move", "visit": "Visiting a friend", "home": "Heading home", "pool": "Going to the condo pool", "hallway": "Hanging out in the hallway", "party": "Throwing a party", "class": "Going to class", "hoops": "Shooting hoops", "playground": "Playing at the playground", "picnic": "Having a picnic", "onsen": "Soaking in the hot spring", "campfire": "Sitting by the campfire", "lookout": "Going to the stargazing lookout", "snack": "Grabbing a snack", "jog": "Going for a jog", "kite": "Flying a kite", "selfie": "Taking selfies", "yoga": "Doing yoga", "sandcastle": "Building a sandcastle", "peoplewatch": "People-watching"};
+const INTENT_ICONS = {"swim": "🏊", "dance": "💃", "exercise": "💪", "shop": "🛍️", "beach": "🏖️", "hoops": "🏀", "playground": "🛝", "picnic": "🧺", "onsen": "♨️", "campfire": "🔥", "lookout": "🔭", "snack": "🌮", "jog": "🏃", "kite": "🪁", "selfie": "📸", "yoga": "🧘", "sandcastle": "🏰", "party": "🎉", "class": "📚", "visit": "🚪", "home": "🏠", "pool": "🏊", "pier": "🎣"};
+
 export function think(res, sim) {
   if (res.plan.length || res.step || res.engaged || res.inside || res.ko || res.moving) return;
   // pick up what they were doing before being interrupted
@@ -93,6 +96,7 @@ export function think(res, sim) {
   // --- night: go home and sleep (not while on the clock — early shifts start before dawn)
   if (!onClock && (isBedtime(res, sim) || n.energy < 12) && !res.nightOut) {
     if (home) {
+      res.setIntent('Going home to sleep', '💤');
       const minutes = sleepMinutes(res, sim);
       res.setPlan([
         { kind: 'walk', x: home.door[0], z: home.door[1] },
@@ -114,6 +118,7 @@ export function think(res, sim) {
   // --- badly hurt or sick: clinic
   const severe = d.injuries.some((i) => !i.treated && (INJURIES[i.type]?.severity ?? 1) >= 2);
   if (severe && sim.locations.clinic && chance(0.8)) {
+    res.setIntent('Going to the clinic to get patched up', '🏥');
     const c = sim.locations.clinic;
     res.setPlan([
       { kind: 'call', fn: () => res.say(line('hurt'), { emoji: '🏥' }) },
@@ -127,6 +132,7 @@ export function think(res, sim) {
   // on the clock means working — snacks and breaks happen at work
   const job = jobOf(res);
   if (job && onClock) {
+    res.setIntent(`Heading to work`, '💼');
     // work clothes come from the wardrobe at home (once per shift)
     if (res.workDressDay !== sim.day) {
       res.workDressDay = sim.day;
@@ -152,6 +158,7 @@ export function think(res, sim) {
 
   // --- hungry: café
   if (n.hunger < 35) {
+    res.setIntent('Getting something to eat', '🍽️');
     const c = sim.locations.cafe;
     const seat = !w.raining && chance(0.4) ? island.freeSeat('cafe') : null;
     if (seat) {
@@ -173,6 +180,7 @@ export function think(res, sim) {
   if ((w.raining || w.snowing) && !d.hasUmbrella) {
     const p = w.stormy ? 0.85 : 0.55 + w.p.rain * 0.3 - res.t.quirk * 0.4;
     if (chance(p) && home) {
+      res.setIntent('Getting out of the rain', '☔');
       res.setPlan([
         { kind: 'call', fn: () => res.say(line(w.snowing ? 'snow' : w.stormy ? 'storm' : 'soaked'), { emoji: w.snowing ? '❄️' : '💦' }) },
         { kind: 'walk', x: home.door[0], z: home.door[1], run: true },
@@ -189,7 +197,7 @@ export function think(res, sim) {
 
   // --- want company
   const lonely = n.social < 50 || chance(0.35 + res.t.sociability * 0.35);
-  if (lonely && sim.social.trySocialize(res)) return;
+  if (lonely && sim.social.trySocialize(res)) { res.setIntent('Going to talk to someone', '💬'); return; }
 
   // --- grudge: maybe go looking for trouble
   if (sim.settings.conflict !== 'off') {
@@ -228,6 +236,7 @@ export function think(res, sim) {
     ...activityChoices(res, sim),
   ];
   const what = weightedPick(choices);
+  res.setIntent(INTENT_LABELS[what] || 'Taking it easy', INTENT_ICONS[what] || '💭');
   const happyExpr = { happy: 0.5 + res.t.energy * 0.3 };
   switch (what) {
     case 'bench': {

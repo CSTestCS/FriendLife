@@ -47,6 +47,7 @@ export class SwimManager {
 
   planSwim(res) {
     const sim = this.sim;
+    res.setIntent?.('Going swimming', '🏊');
     // into swimwear first (from the wardrobe at home), then back to the water
     // an "Underwear" outfit tagged for swimming: strip down right here, no wardrobe needed
     const uw = this.needsSwimwear(res) ? (res.d.outfits || []).findIndex((o, i) => isUnderwear(res, i) && outfitMeta(res, i)?.tags?.includes('swim')) : -1;
@@ -185,6 +186,12 @@ export class SwimManager {
     c.phase = 'approach';
     c.approachT = 0;
     rescuer.say(isGuard ? pick(['Hang on! I\'m coming!', 'Lifeguard on the way!', 'Stay calm, I\'ve got you!']) : pick(['I\'ll save you!', 'Hold on!!', 'I\'m coming!']), { emoji: isGuard ? '🛟' : '💪' });
+    // not in swimwear but they have an "Underwear" outfit: strip down before diving in
+    if (!outfitMeta(rescuer, rescuer.d.wearing ?? -1)?.tags?.includes('swim')) {
+      const uws = (rescuer.d.outfits || []).map((_, i) => i).filter((i) => isUnderwear(rescuer, i));
+      const uw = uws.find((i) => outfitMeta(rescuer, i)?.tags?.includes('swim')) ?? uws[0];
+      if (uw != null && rescuer.d.wearing !== uw) sim.changeOutfit(rescuer, uw, { quiet: true, purpose: 'swim', force: true });
+    }
     rescuer.moveTo(c.victim.x, c.victim.z, { run: true, stopDist: 0.8 });
   }
 

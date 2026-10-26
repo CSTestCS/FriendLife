@@ -45,6 +45,10 @@ export class Panel {
       h('div', {}, h('h2', {}, r.name), h('div', { class: 'meta' }, `${personalityLabel(r.t)} · Lv ${r.d.level} · ${loc}`)),
       h('button', { class: 'close small', onclick: () => sim.select(null) }, '✕'),
     ));
+    // what they're trying to do right now
+    this.intentEl = h('div', { class: 'intent', title: 'What they\'re trying to do right now', style: { margin: '2px 0 8px', padding: '6px 10px', borderRadius: '10px', background: '#fff3e4', fontWeight: 700 } });
+    el.append(this.intentEl);
+    this.renderIntent();
 
     // problem
     const prob = sim.problems.describe(r);
@@ -146,6 +150,13 @@ export class Panel {
     el.append(h('div', { style: { marginTop: '14px' } }, h('button', { class: 'danger small', onclick: async () => { if (await confirmBox(`Say goodbye to ${r.name}? They will move off the island.`, 'Move away')) sim.removeResident(r); } }, '🧳 Move away')));
   }
 
+  renderIntent() {
+    const r = this.res;
+    if (!r || !this.intentEl) return;
+    const it = r.describeIntent();
+    this.intentEl.textContent = `💭 ${it.icon} ${it.text}`;
+  }
+
   renderStats() {
     const r = this.res;
     if (!r || !this.statsEl) return;
@@ -167,6 +178,7 @@ export class Panel {
     if (this.timer <= 0 && this.res) {
       this.timer = 0.5;
       this.renderStats();
+      this.renderIntent();
       if (!this.sim.residents.includes(this.res)) this.show(null);
     }
   }

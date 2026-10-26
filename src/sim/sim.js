@@ -614,6 +614,7 @@ export class Sim extends Emitter {
     this.seeking ||= [];
     this.seeking = this.seeking.filter((j) => j.a !== a);
     const job = { a, b, kind, opts, deadline: this.clock + 150, headingTo: undefined, next: 0 };
+    a.setIntent(`Going to find ${b.name}`, '🚶');
     this.seeking.push(job);
     this._seek(job);
   }

@@ -85,9 +85,10 @@ Otherwise nights are quiet: residents who are home at bedtime stay in, do their 
 
 ### Handy tools
 
+- **💭 What they're up to:** a selected resident's panel shows what they're trying to do right now — "Going swimming", "Going to find Rose", "Waiting to dry off before getting dressed", "Doing the mail round", "Sneaking out for a midnight dip"…
 - **📍 Teleport…** (resident panel): someone stuck? Instantly send them to their apartment, a building or any spot on the island.
 - **📤 Export** (resident panel) saves a resident to a `.friendlife-character.json` file — look, closet, personality, voice and words, with the models, textures and variants they use built in. **📥 Import Character** (under the resident list) brings them onto any island.
-- Romance (crushes, dating, confessions) only happens between men and women. Residents step aside to pass each other instead of bumping into each other.
+- Romance (crushes, dating, confessions) only happens between men and women. In conversations each line lasts until it has been fully spoken, so nobody gets cut off. Someone diving in to rescue a swimmer strips down to their "Underwear" outfit first if they're not in swimwear. Residents step aside to pass each other instead of bumping into each other.
 
 ### The mail carrier
 

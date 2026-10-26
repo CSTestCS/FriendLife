@@ -275,6 +275,41 @@ export class Resident {
   }
 
   // ------------------------------------------------------------------ status
+  /** Remember what they've set out to do (shown on their panel). */
+  setIntent(text, icon = '💭') { this.intent = { text, icon, at: this.sim.clock }; }
+
+  /** What they're trying to do right now, as {icon, text}. */
+  describeIntent() {
+    const sim = this.sim;
+    const e = this.engaged;
+    const name = (r) => r?.name || 'someone';
+    if (this.ko) return { icon: '💫', text: 'Recovering after being knocked down' };
+    if (e?.isRescue) return e.rescuer === this ? { icon: '🛟', text: `Rescuing ${name(e.victim)}` } : { icon: '🆘', text: 'Struggling in the water!' };
+    if (e?.isFight) return { icon: '🥊', text: 'Fighting!' };
+    if (e) {
+      const other = e.a === this ? e.b : e.a;
+      const KIND = { chat: 'Chatting', argue: 'Arguing', insult: 'Trading insults', joke: 'Joking around', gossip: 'Gossiping', hug: 'Hugging', date: 'On a date', confess: 'Confessing their feelings', compliment: 'Complimenting', prank: 'Pranking', apology: 'Apologising', breakup: 'Breaking up', danceOff: 'In a dance-off', mail: 'Mail visit', highfive: 'High-fiving', rps: 'Playing rock-paper-scissors', advice: 'Asking for advice', brag: 'Bragging', tease: 'Teasing', secret: 'Sharing a secret', snack: 'Sharing a snack', story: 'Telling a story', selfie: 'Taking a selfie', complain: 'Having a moan', outfitTalk: 'Talking fashion', comfort: 'Comforting', tag: 'Playing tag', thumbwar: 'Thumb wrestling', duet: 'Singing a duet', invite: 'Making plans' };
+      return { icon: '💬', text: `${KIND[e.kind] || 'Hanging out'} with ${name(other)}` };
+    }
+    const seek = sim.seeking?.find((j) => j.a === this);
+    if (seek) return { icon: '🚶', text: `Going to find ${name(seek.b)} (${seek.kind})` };
+    if (this.nightOut) return this.nightOut.kind === 'investigate' ? { icon: '👀', text: 'Checking out a noise outside' } : { icon: '🌙', text: `Sneaking out for ${sim.night?.label?.(this.nightOut.kind) || 'some mischief'}` };
+    if (this.pendingChange || this.dryingOff) return { icon: '💧', text: 'Waiting to dry off before getting dressed' };
+    if (this.errand?.kind === 'dress') return { icon: '👕', text: this.errand.activity ? `Going to their wardrobe to change for ${this.errand.activity === 'swim' ? 'swimming' : this.errand.activity}` : 'Going to change clothes' };
+    if (this.working) return { icon: '💼', text: this.d.job?.id === 'mail' ? 'Doing the mail round' : `Working${this.d.job ? ` (${this.d.job.id})` : ''}` };
+    if (this.sleeping) return { icon: '💤', text: this.bedtimeDone ? 'Sleeping' : 'Getting ready for bed' };
+    if (this.morningPending) return { icon: '☀️', text: 'Getting ready for the day' };
+    if (this.inWater) return { icon: '🏊', text: 'Swimming' };
+    if (this.route?.keys?.length) return { icon: '🚶', text: `On the way to ${sim.placeName(this.route.keys[this.route.keys.length - 1])}` };
+    const it = this.intent;
+    if (it && (sim.clock - it.at < 90) && (this.plan.length || this.step || this.moving || this.seat || this.inside)) return { icon: it.icon, text: it.text };
+    if (this.inside) return { icon: '🏠', text: `Hanging out at ${sim.placeName(this.inside)}` };
+    return { icon: '🙂', text: 'Taking it easy' };
+  }
+
+  /** Still saying their last line out loud? */
+  saying() { return !!this.sim.voice?.isSpeaking(this.id); }
+
   get available() {
     return !this.engaged && !this.inside && !this.ko && this.sim.residents.includes(this);
   }

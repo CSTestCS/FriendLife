@@ -32,6 +32,8 @@ export class NightLife {
     this.tonight = -1; // night (day number) of the last outing
   }
 
+  label(kind) { return MISCHIEF[kind]?.label || null; }
+
   get enabled() { return this.sim.settings.nightMischief !== false; }
 
   /** Per game minute. */

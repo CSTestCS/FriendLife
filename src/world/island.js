@@ -264,6 +264,11 @@ export class Island {
       this.addPlatform(c.x, c.z, -0.3, 1.1, 5.15, 0.39);
     }
 
+    // new places to go where the old house plots were (placed before the random
+    // trees, which keep clear of them and their benches)
+    this.venueAnim = placeVenues(this);
+    const venueReserve = Object.values(this.locations).filter((l) => l.venue).map((l) => this.addObstacle(l.x, l.z, (l.radius || 3) + 1.5));
+
     // palms and scattered trees around the coast
     for (let i = 0; i < 22; i++) {
       const a = rand(0, Math.PI * 2);
@@ -300,11 +305,10 @@ export class Island {
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (!this.isBlocked(x, z, 1)) this.lookouts.push({ x, z, rot: Math.atan2(x, z) });
     }
+    for (const o of venueReserve) this.obstacles.splice(this.obstacles.indexOf(o), 1);
     for (const o of this.condoReserve) this.obstacles.splice(this.obstacles.indexOf(o), 1);
     this.condoReserve = [];
 
-    // new places to go where the old house plots were
-    this.venueAnim = placeVenues(this);
     this.showCondo(true);
 
     // merge the static scenery (trees, lamps, paths, stage, pier…) into a few meshes;

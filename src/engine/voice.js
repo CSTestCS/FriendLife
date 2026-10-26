@@ -176,6 +176,9 @@ export class VoiceEngine {
     this.builtin = new SynthClient();
     this.claims = new Map(); // key → token (latest line per speaker wins)
     this.playing = new Map(); // key → {nodes, end}
+    this.rendering = new Set(); // keys whose line is still being synthesized
+    this.ends = new Map(); // key → audio time their babble ends
+    this.sysKey = null; // who the OS voice is speaking for
     this._n = 0;
     if (this.synth) {
       const load = () => { this.voices = this.synth.getVoices() || []; };
@@ -214,18 +217,19 @@ export class VoiceEngine {
       if (useSystem && this.desktopTTS && this.audio?.ctx) {
         return this.speakBuiltin(plan, v, { volume, force, key: force ? '__test' : key, system: true }).catch((err) => {
           console.warn('system voice rendering failed, speaking directly:', err?.message || err);
+          this.sysKey = key;
           this.speakSystem(plan, v, { volume, force: true });
         });
       }
       if (!useSystem && this.audio?.ctx && this.builtin.supported) {
         return this.speakBuiltin(plan, v, { volume, force, key: force ? '__test' : key }).catch((err) => {
           console.warn('built-in speech failed, using fallback:', err);
-          if (this.synth) this.speakSystem(plan, v, { volume, force }); else this.babble(clean, v, volume, plan);
+          if (this.synth) { this.sysKey = key; this.speakSystem(plan, v, { volume, force }); } else this.babble(clean, v, volume, plan, key);
         });
       }
-      if (this.synth) { this.speakSystem(plan, v, { volume, force }); return; }
+      if (this.synth) { this.sysKey = key; this.speakSystem(plan, v, { volume, force }); return; }
     }
-    this.babble(clean, v, volume, plan);
+    this.babble(clean, v, volume, plan, key);
   }
 
   /** The pitch/speed shape a line would get (for tests and tools). */
@@ -286,6 +290,8 @@ export class VoiceEngine {
       return { text, pitch: esPitchParam(es), speed: (175 * c.speedMul) / play, variant: v.synthVoice || 'm3', accent: v.accent || 'en-us' };
     });
     let results;
+    if (key) this.rendering.add(key);
+    try {
     if (system) {
       // the system voice speaks each phrase at a compensating speed; all of the pitch
       // (and the word-by-word intonation / emotion glide) is done by playback below
@@ -300,6 +306,7 @@ export class VoiceEngine {
       if (!wavs || wavs.every((w) => !w)) throw new Error('system voice not available for rendering');
       results = wavs.map((w) => (w ? parseWav(w) : null));
     } else results = await this.builtin.render(jobs);
+    } finally { if (key && this.claims.get(key) === token) this.rendering.delete(key); else if (key && !this.claims.has(key)) this.rendering.delete(key); }
     if (key && this.claims.get(key) !== token) return; // a newer line from this speaker took over
     if (key) this._stopKey(key);
 
@@ -371,7 +378,7 @@ export class VoiceEngine {
   }
 
   /** Animal-Crossing-like syllable babble using WebAudio, following the line's shape. */
-  babble(text, v, volume = 1, plan = planProsody(text, v, 'neutral')) {
+  babble(text, v, volume = 1, plan = planProsody(text, v, 'neutral'), key = null) {
     const a = this.audio;
     if (!a?.ctx) return;
     const ctx = a.ctx;
@@ -439,6 +446,21 @@ export class VoiceEngine {
       }
       t += step * (0.9 + Math.random() * 0.3);
     }
+    if (key) this.ends.set(key, t);
+  }
+
+  /**
+   * Is this speaker still talking (or is their line still being prepared)?
+   * Conversations wait for it so nobody gets cut off.
+   */
+  isSpeaking(key) {
+    if (!key) return false;
+    if (this.rendering.has(key)) return true;
+    const now = this.audio?.ctx?.currentTime ?? 0;
+    const p = this.playing.get(key);
+    if (p && p.end > now) return true;
+    if ((this.ends.get(key) ?? 0) > now) return true;
+    return this.sysKey === key && !!this.synth?.speaking;
   }
 }
 

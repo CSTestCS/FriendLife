@@ -74,7 +74,10 @@ export class Interaction {
       if (!this.noFaceB) b.faceTo(a.x, a.z);
       this.beatT += dt;
       const beat = this.beats[this.beatIndex];
-      if (!beat || this.beatT >= beat.dur) this.nextBeat();
+      // a line lasts until it's been fully spoken (voices take longer than text),
+      // within reason so a stuck voice can't freeze the chat
+      const talking = beat && (a.saying() || b.saying());
+      if (!beat || (this.beatT >= beat.dur && (!talking || this.beatT >= beat.dur + 10))) this.nextBeat();
     }
   }
 
