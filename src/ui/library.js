@@ -139,7 +139,7 @@ export function openLibrary(app, tab = 'character') {
               r.clearPlan(); r.setPlan([{ kind: 'anim', anim: a.id, dur: Math.max(3, clip.duration * (clip.loop ? 2 : 1)) }]);
               toast(`${r.name} plays ${lib.displayName(a.id)}`);
             } }, '▶ Preview'),
-            a.ext === 'json' ? h('button', { class: 'small', onclick: () => { m.close(); app.openStudio(a.id); } }, '✏ Edit') : null,
+            h('button', { class: 'small', title: a.ext === 'json' ? 'Edit in the Studio' : 'Open in the Studio as keyframes (saved as a new animation; the original file stays)', onclick: () => { m.close(); app.openStudio(a.id); } }, '✏ Edit'),
           ].filter(Boolean));
         }
         if (a.source !== 'mod') {

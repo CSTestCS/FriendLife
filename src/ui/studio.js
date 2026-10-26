@@ -11,6 +11,36 @@ import { Avatar } from '../characters/avatar.js';
 import { DEG } from '../core/util.js';
 
 const EDIT_BONES = BONES.filter((b) => !['leftToes', 'rightToes'].includes(b));
+const R2D = 180 / Math.PI;
+
+/**
+ * Turn any clip (imported Mixamo .fbx, .vrma, JSON…) into editable keyframes:
+ * sample it `fps` times a second and store each bone's rotation (degrees) and
+ * the hips offset. Played back linearly it looks the same as the original.
+ */
+export function bakeClip(clip, name, fps = 12) {
+  const dur = Math.max(0.05, clip.duration || 1);
+  const n = Math.max(2, Math.round(dur * fps));
+  const pose = makePose();
+  const e = new THREE.Euler();
+  const keys = [];
+  for (let i = 0; i <= n; i++) {
+    if (clip.loop !== false && i === n) break; // the loop wraps back to the first key
+    const t = Math.min(dur, (i / n) * dur);
+    clip.sample(t, pose);
+    const k = { t: Math.round(t * 1000) / 1000, pose: {}, hips: pose.hips.toArray().map((v) => Math.round(v * 1000) / 1000) };
+    for (const b of BONES) {
+      const q = pose.rot[b];
+      if (Math.abs(q.w) > 0.99995 && i > 0 && !keys[0].pose[b]) continue; // never moves: leave it out
+      e.setFromQuaternion(q, 'XYZ');
+      k.pose[b] = [e.x * R2D, e.y * R2D, e.z * R2D].map((v) => Math.round(v * 10) / 10);
+    }
+    keys.push(k);
+  }
+  // bones that only showed up later still need a value in the first key
+  for (const k of keys) for (const b of Object.keys(k.pose)) if (!keys[0].pose[b]) keys[0].pose[b] = [0, 0, 0];
+  return { name, duration: Math.round(dur * 1000) / 1000, loop: clip.loop !== false, base: 'none', ease: 'linear', keys };
+}
 
 export async function openStudio(app, assetId = null) {
   const sim = app.sim;
@@ -19,8 +49,25 @@ export async function openStudio(app, assetId = null) {
     name: 'My Animation', duration: 1.6, loop: true, base: 'stand',
     keys: [{ t: 0, pose: {}, hips: [0, 0, 0] }, { t: 0.8, pose: { rightUpperArm: [0, 0, -40] }, hips: [0, 0, 0] }],
   };
+  // open a library animation: JSON as-is, anything else (Mixamo .fbx, .vrma) baked into keyframes
+  const fromLibrary = async (id) => {
+    const info = lib.get(id);
+    if (info?.ext === 'json') {
+      const d = JSON.parse(await lib.getText(id));
+      d.name = d.name || lib.displayName(id);
+      return d;
+    }
+    const clip = sim.registry.custom.get(id) || await sim.registry.loadAsset(id);
+    if (!clip) throw new Error('could not load');
+    return bakeClip(clip, `${lib.displayName(id)} (edited)`);
+  };
+  let sourceId = null; // imported animation being adjusted (its in-game uses move to the edit)
   if (assetId) {
-    try { doc = JSON.parse(await lib.getText(assetId)); doc.name = doc.name || lib.displayName(assetId); } catch (e) { toast('Could not open that animation.'); }
+    try {
+      doc = await fromLibrary(assetId);
+      // a baked import is saved as a new JSON animation (the original file stays)
+      if (lib.get(assetId)?.ext !== 'json') { sourceId = assetId; assetId = null; }
+    } catch (e) { toast('Could not open that animation.'); }
   }
   let keyIdx = 0;
   let bone = 'rightUpperArm';
@@ -84,12 +131,27 @@ export async function openStudio(app, assetId = null) {
             h('label', { class: 'tag', title: 'Bones you don\'t key use the relaxed standing pose (arms down). Off = T-pose.' }, h('input', { type: 'checkbox', checked: doc.base !== 'none', onchange: (e) => { doc.base = e.target.checked ? 'stand' : 'none'; rebuild(); } }), ' Standing base'),
           ),
           h('div', { class: 'field' }, h('label', {}, 'Start from'), (() => {
-            const sel = h('select', { onchange: (e) => {
+            const libAnims = lib.list('animation');
+            const sel = h('select', { onchange: async (e) => {
               const v = e.target.value;
               if (!v) return;
+              if (v.startsWith('lib:')) {
+                // an imported animation (Mixamo / VRMA / JSON) to adjust; saved as a new animation
+                try {
+                  doc = await fromLibrary(v.slice(4));
+                  if (!/\(edited\)$/.test(doc.name)) doc.name = `${doc.name} (edited)`;
+                  assetId = null;
+                  sourceId = v.slice(4);
+                  keyIdx = 0; time = 0; rebuild(); renderSide();
+                  toast(`Loaded ${doc.keys.length} keyframes — tweak any key, then 💾 Save.`);
+                } catch (err) { toast('Could not open that animation.'); }
+                return;
+              }
               const def = BUILTIN_ANIMATIONS.find((a) => a.name === v);
               if (def) { doc = JSON.parse(JSON.stringify({ ...def, name: `${def.name} (custom)` })); doc.keys = doc.keys || []; keyIdx = 0; rebuild(); renderSide(); }
-            } }, h('option', { value: '' }, '— built-in animation —'), ...BUILTIN_ANIMATIONS.filter((a) => a.keys).map((a) => h('option', { value: a.name }, a.name)));
+            } }, h('option', { value: '' }, '— pick an animation —'),
+            libAnims.length ? h('optgroup', { label: 'Your library (Mixamo, VRMA, JSON)' }, ...libAnims.map((a) => h('option', { value: `lib:${a.id}` }, `${lib.displayName(a.id)} (.${a.ext})`))) : null,
+            h('optgroup', { label: 'Built-in' }, ...BUILTIN_ANIMATIONS.filter((a) => a.keys).map((a) => h('option', { value: a.name }, a.name))));
             return sel;
           })()),
         );
@@ -193,6 +255,16 @@ export async function openStudio(app, assetId = null) {
       const asset = await lib.add({ name, type: 'animation', data, ext: 'json' });
       assetId = asset.id;
       await sim.registry.loadAsset(asset.id);
+      // an adjusted import takes over the original's jobs in game (actions it replaces, idle emote)
+      if (sourceId) {
+        const reg = sim.registry;
+        const took = [];
+        for (const [k, v] of Object.entries(reg.actionMap)) if (v === sourceId) { reg.actionMap[k] = asset.id; took.push(k); }
+        if (reg.emotes.has(sourceId)) { reg.emotes.delete(sourceId); reg.emotes.add(asset.id); took.push('idle emote'); }
+        reg.emit('change');
+        sourceId = null;
+        if (took.length) { toast(`Saved “${name}” — now used in game for: ${took.join(', ')} (instead of the original).`); return; }
+      }
     }
     toast(`Saved “${name}”. Map it to an action or make it an idle emote in 📦 Library → Animations.`);
   }

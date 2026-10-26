@@ -5,6 +5,8 @@ import * as activitiesDebug from './sim/activities.js';
 import * as relDebug from './sim/relations.js';
 import * as charIODebug from './ui/charIO.js';
 import * as social2Debug from './sim/social2.js';
+import * as studioDebug from './ui/studio.js';
+import * as animDebug from './characters/animation.js';
 import { Stage } from './engine/stage.js';
 import { Weather } from './engine/weather.js';
 import { AudioEngine } from './engine/audio.js';
@@ -70,6 +72,8 @@ class App {
     window.__friendlifeRel = relDebug;
     window.__friendlifeCharIO = charIODebug;
     window.__friendlifeSocial2 = social2Debug;
+    window.__friendlifeStudio = studioDebug;
+    window.__friendlifeAnim = animDebug;
     await this.showTitle();
   }
 

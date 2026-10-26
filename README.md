@@ -211,6 +211,7 @@ A texture (imported, or one built into the model) with **"metallic"** or **"silk
 
 - **.vrma** — the standard VRM Animation format (VRoid Hub, Blender VRM add-on, VRM Posing Desktop, etc.).
 - **.fbx from [Mixamo](https://www.mixamo.com)** — download as *FBX*, with or without skin (tick *In Place* for walks and runs). The Mixamo skeleton is retargeted onto VRM and doll residents automatically. Files named like the action (`Walking.fbx`, `Punching.fbx`, `Hip Hop Dancing.fbx`, `Sitting.fbx`…) are mapped to that action on import.
+- **Adjusting imported animations:** any library animation — Mixamo **.fbx**, **.vrma** or JSON — opens in the **🎬 Studio** (Library → **✏ Edit**, or Studio → *Start from* → *Your library*). Imports are turned into keyframes (12 per second) you can tweak bone by bone; saving makes a new JSON animation (the original file stays) that **takes over the original's job in game** (the actions it replaces, idle emote).
 - **.json** — FriendLife keyframe animations. Make them in the **🎬 Studio** (pose bones with sliders at keyframes, preview live, save to the library), or write them by hand:
 
 ```json
