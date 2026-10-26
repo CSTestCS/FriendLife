@@ -84,6 +84,12 @@ export class KeyframeClip {
     }
     for (const arr of Object.values(this.tracks)) arr.sort((a, b) => a.t - b.t);
     this.hipsTrack.sort((a, b) => a.t - b.t);
+    // body rotation per key (turns the whole body, on top of the pose)
+    this.bodyTrack = keys.filter((k) => Array.isArray(k.bodyRot)).map((k) => ({ t: k.t, q: eulerDegToQuat(k.bodyRot) }));
+    // whole-animation fix-ups: move / turn every frame (e.g. a sit that sits too high, a sleep facing the wrong way)
+    const off = def.offset || {};
+    this.offsetPos = Array.isArray(off.pos) ? new THREE.Vector3().fromArray(off.pos) : null;
+    this.offsetRot = Array.isArray(off.rot) && off.rot.some((v) => v) ? eulerDegToQuat(off.rot) : null;
   }
 
   _find(track, t) {
@@ -132,9 +138,18 @@ export class KeyframeClip {
       const alpha = this.ease === 'linear' ? a : smooth(a);
       pose.hips.copy(this.hipsTrack[i0].v).lerp(this.hipsTrack[i1].v, alpha);
     } else pose.hips.set(0, 0, 0);
+    if (this.bodyTrack.length) {
+      const [i0, i1, a] = this._find(this.bodyTrack, t);
+      const alpha = this.ease === 'linear' ? a : smooth(a);
+      _bq.copy(this.bodyTrack[i0].q).slerp(this.bodyTrack[i1].q, alpha);
+      pose.rot.hips.premultiply(_bq);
+    }
+    if (this.offsetRot) pose.rot.hips.premultiply(this.offsetRot);
+    if (this.offsetPos) pose.hips.add(this.offsetPos);
     return pose;
   }
 }
+const _bq = new THREE.Quaternion();
 
 /** Wraps a VRMAnimation (from @pixiv/three-vrm-animation). */
 export class VrmaClip {

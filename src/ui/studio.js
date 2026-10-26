@@ -70,6 +70,8 @@ export async function openStudio(app, assetId = null) {
     } catch (e) { toast('Could not open that animation.'); }
   }
   let keyIdx = 0;
+  let keysOpen = null; // keyframe list shown? (null = decide by length)
+  let bodyMode = 'all'; // body position / rotation edits: 'all' = whole animation, 'key' = this key
   let bone = 'rightUpperArm';
   let time = 0;
   let playing = true;
@@ -121,6 +123,32 @@ export async function openStudio(app, assetId = null) {
           h('button', { class: 'small', onclick: () => { playing = !playing; } }, '⏯'), scrub, timeLbl);
       }
 
+      function bodySection() {
+        const box = h('div', { class: 'field', style: { borderTop: '1px solid #0001', paddingTop: '6px' } });
+        const key = doc.keys[keyIdx];
+        const all = bodyMode === 'all' || !key;
+        box.append(h('div', { class: 'row', style: { alignItems: 'center', gap: '6px' } }, h('b', {}, 'Body'),
+          ...[['all', 'Whole animation'], ['key', 'This key']].map(([k, l]) => h('button', { class: `small ${bodyMode === k ? 'active' : ''}`, onclick: () => { bodyMode = k; renderSide(); } }, l)),
+          all && (doc.offset?.pos?.some((v) => v) || doc.offset?.rot?.some((v) => v)) ? h('button', { class: 'small', onclick: () => { delete doc.offset; rebuild(); renderSide(); } }, '↺ Reset') : null));
+        box.append(h('div', { class: 'hint' }, all
+          ? 'Moves / turns every frame at once — fix a sit that floats or sinks, a sleep facing the wrong way, an animation that drifts sideways.'
+          : `Only key #${keyIdx + 1} (${key.t.toFixed(2)}s); in between it blends.`));
+        const slider = (label, min, max, step, get, set, fmt) => {
+          const out = h('b', {}, fmt(get()));
+          return h('div', { class: 'trait' }, h('span', {}, label), h('input', { type: 'range', min, max, step, value: get(), oninput: (e) => { set(+e.target.value); out.textContent = fmt(+e.target.value); if (!all) { time = key.t; playing = false; } rebuild(); } }), out);
+        };
+        const posArr = () => (all ? ((doc.offset ||= {}).pos ||= [0, 0, 0]) : (key.hips ||= [0, 0, 0]));
+        const rotArr = () => (all ? ((doc.offset ||= {}).rot ||= [0, 0, 0]) : (key.bodyRot ||= [0, 0, 0]));
+        const pos = h('div', { class: 'bone-sliders' });
+        ['X', 'Y', 'Z'].forEach((ax, i) => pos.append(slider(ax, -1.5, 1.5, 0.01, () => posArr()[i], (v) => { posArr()[i] = v; }, (v) => v.toFixed(2))));
+        const rot = h('div', { class: 'bone-sliders' });
+        [['X', 'tip forward/back'], ['Y', 'turn around'], ['Z', 'roll sideways']].forEach(([ax, tip], i) => rot.append(slider(ax, -180, 180, 1, () => rotArr()[i], (v) => { rotArr()[i] = v; }, (v) => `${Math.round(v)}°`)));
+        box.append(h('label', {}, 'Position (hip-heights; Y −0.45 ≈ sitting)'), pos,
+          h('label', {}, 'Rotation (X: tip forward/back · Y: turn around · Z: roll)'), rot,
+          h('div', { class: 'row' }, ...[[0, 180, 0, '↻ Turn around 180°'], [90, 0, 0, '⤵ Lie face-up/down (X 90°)'], [0, 0, 90, '⤷ Roll onto side (Z 90°)']].map(([x, y, z, l]) => h('button', { class: 'small', onclick: () => { const r = rotArr(); const wrap = (v) => { const w = ((((v + 180) % 360) + 360) % 360) - 180; return w === -180 ? 180 : w; }; r[0] = wrap(r[0] + x); r[1] = wrap(r[1] + y); r[2] = wrap(r[2] + z); rebuild(); renderSide(); } }, l))));
+        return box;
+      }
+
       const renderSide = () => {
         side.innerHTML = '';
         side.append(
@@ -155,14 +183,25 @@ export async function openStudio(app, assetId = null) {
             return sel;
           })()),
         );
-        // keys
-        const keys = h('div', { class: 'keys' });
-        doc.keys.forEach((k, i) => keys.append(h('button', { class: `small ${i === keyIdx ? 'sel' : ''}`, onclick: () => { keyIdx = i; time = k.t; playing = false; renderSide(); } }, `${k.t.toFixed(2)}s`)));
-        side.append(h('div', { class: 'field' }, h('label', {}, 'Keyframes'), keys, h('div', { class: 'row' },
+        // keys (collapsible: long imported animations have hundreds)
+        if (keysOpen === null) keysOpen = doc.keys.length <= 24;
+        const goKey = (i) => { keyIdx = Math.max(0, Math.min(doc.keys.length - 1, i)); time = doc.keys[keyIdx].t; playing = false; renderSide(); };
+        const head = h('div', { class: 'row', style: { alignItems: 'center', gap: '6px' } },
+          h('button', { class: 'small', title: keysOpen ? 'Hide the keyframe list' : 'Show all keyframes', onclick: () => { keysOpen = !keysOpen; renderSide(); } }, keysOpen ? '▾' : '▸'),
+          h('b', {}, `Keyframes (${doc.keys.length})`),
+          h('button', { class: 'small', title: 'Previous key', onclick: () => goKey(keyIdx - 1) }, '◀'),
+          h('span', { class: 'tag' }, doc.keys[keyIdx] ? `#${keyIdx + 1} · ${doc.keys[keyIdx].t.toFixed(2)}s` : '—'),
+          h('button', { class: 'small', title: 'Next key', onclick: () => goKey(keyIdx + 1) }, '▶'),
+          h('button', { class: 'small', title: 'Jump to the key nearest the playhead', onclick: () => { let best = 0; doc.keys.forEach((k, i) => { if (Math.abs(k.t - time) < Math.abs(doc.keys[best].t - time)) best = i; }); goKey(best); } }, '⌖ Nearest'));
+        const keys = h('div', { class: 'keys', style: { maxHeight: '110px', overflowY: 'auto' } });
+        if (keysOpen) doc.keys.forEach((k, i) => keys.append(h('button', { class: `small ${i === keyIdx ? 'sel' : ''}`, onclick: () => goKey(i) }, `${k.t.toFixed(2)}s`)));
+        side.append(h('div', { class: 'field' }, head, keysOpen ? keys : null, h('div', { class: 'row' },
           h('button', { class: 'small primary', onclick: () => { const t = Math.round(Math.min(time, doc.duration) * 100) / 100; if (doc.keys.some((k) => Math.abs(k.t - t) < 0.01)) return toast('There is already a key here.'); const k = { t, pose: {}, hips: [0, 0, 0] }; doc.keys.push(k); doc.keys.sort((a, b) => a.t - b.t); keyIdx = doc.keys.indexOf(k); rebuild(); renderSide(); } }, '＋ Key at playhead'),
           h('button', { class: 'small', onclick: () => { const k = doc.keys[keyIdx]; if (!k) return; const copy = JSON.parse(JSON.stringify(k)); copy.t = Math.min(doc.duration, Math.round((time + 0.01) * 100) / 100); if (doc.keys.some((x) => Math.abs(x.t - copy.t) < 0.01)) return toast('Move the playhead to an empty time first.'); doc.keys.push(copy); doc.keys.sort((a, b) => a.t - b.t); keyIdx = doc.keys.indexOf(copy); rebuild(); renderSide(); } }, '⧉ Duplicate to playhead'),
           h('button', { class: 'small danger', disabled: doc.keys.length <= 1, onclick: () => { doc.keys.splice(keyIdx, 1); keyIdx = Math.max(0, keyIdx - 1); rebuild(); renderSide(); } }, '🗑 Key'),
         )));
+        // body position + rotation: for the whole animation, or just this key
+        side.append(bodySection());
         const key = doc.keys[keyIdx];
         if (!key) return;
         side.append(h('div', { class: 'field' }, h('label', {}, 'Key time'), h('input', { type: 'number', step: 0.05, min: 0, max: doc.duration, value: key.t, onchange: (e) => { key.t = Math.max(0, Math.min(doc.duration, +e.target.value)); doc.keys.sort((a, b) => a.t - b.t); keyIdx = doc.keys.indexOf(key); rebuild(); renderSide(); } })));
@@ -186,13 +225,6 @@ export async function openStudio(app, assetId = null) {
           h('button', { class: 'small', onclick: () => { if (key.pose) delete key.pose[bone]; rebuild(); renderSide(); } }, 'Clear bone at this key'),
           h('span', { class: 'hint' }, 'X: forward/back · Y: twist · Z: sideways'),
         ));
-        const hips = key.hips || [0, 0, 0];
-        const hs = h('div', { class: 'bone-sliders' });
-        ['X', 'Y', 'Z'].forEach((ax, i) => {
-          const out = h('b', {}, hips[i].toFixed(2));
-          hs.append(h('div', { class: 'trait' }, h('span', {}, ax), h('input', { type: 'range', min: -1, max: 1, step: 0.01, value: hips[i], oninput: (e) => { key.hips = key.hips || [0, 0, 0]; key.hips[i] = +e.target.value; out.textContent = key.hips[i].toFixed(2); time = key.t; playing = false; rebuild(); } }), out));
-        });
-        side.append(h('div', { class: 'field' }, h('label', {}, 'Body position (in hip-heights; Y −0.45 = sitting)'), hs));
       };
 
       renderSide();
